@@ -198,7 +198,7 @@ select {
 
 .dashboard-toolbar {
   display: grid;
-  grid-template-columns: minmax(160px, 0.52fr) minmax(450px, 1fr);
+  grid-template-columns: minmax(160px, 0.46fr) minmax(390px, 1fr);
   align-items: center;
   gap: 16px;
   margin: 0;
@@ -230,7 +230,7 @@ select {
 
 .toolbar-controls {
   display: grid;
-  grid-template-columns: minmax(210px, 250px) minmax(280px, 1fr);
+  grid-template-columns: minmax(270px, 1fr) auto;
   align-items: center;
   gap: 6px 10px;
 }
@@ -243,7 +243,7 @@ select {
 
 .period-switcher {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 3px;
   padding: 3px;
   border: 1px solid var(--line);
@@ -271,6 +271,7 @@ select {
 .date-range-form {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
+  grid-column: 1 / -1;
   align-items: center;
   gap: 6px;
   margin: 0;
@@ -329,25 +330,25 @@ select {
 
 .executive-kpis {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
 
 .cash-kpi {
-  grid-column: span 2;
+  grid-column: auto;
   justify-content: flex-start;
 }
 
 .cash-kpi > strong {
-  margin-top: auto;
+  margin-top: 9px;
 }
 
 .cash-kpi-breakdown {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 12px;
-  margin-top: 2px;
+  grid-template-columns: 1fr;
+  gap: 3px;
+  margin-top: 1px;
 }
 
 .cash-kpi-breakdown span {
@@ -364,17 +365,17 @@ select {
 }
 
 .cash-kpi > small {
-  margin-top: 6px;
+  margin-top: 5px;
   color: #7c6725;
   font-size: 8px;
 }
 
 .kpi-card {
-  min-height: 156px;
+  min-height: 132px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  padding: 19px;
+  justify-content: flex-start;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: 15px;
   background: rgba(255, 253, 250, 0.9);
@@ -389,7 +390,7 @@ select {
 }
 
 .kpi-card p {
-  min-height: 24px;
+  min-height: 20px;
   color: var(--muted);
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -398,7 +399,7 @@ select {
 
 .kpi-card strong {
   display: block;
-  margin: 12px 0 7px;
+  margin: 9px 0 6px;
   font-family: Georgia, "Times New Roman", serif;
   font-size: clamp(25px, 2vw, 34px);
   font-weight: 400;
@@ -1571,7 +1572,7 @@ td:first-child {
   }
 
   .executive-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .executive-grid {
@@ -1668,7 +1669,7 @@ td:first-child {
   }
 
   .kpi-card {
-    min-height: 140px;
+    min-height: 126px;
     padding: 15px;
   }
 

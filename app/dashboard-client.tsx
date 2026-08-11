@@ -149,6 +149,9 @@ export function DashboardClient({
   const [appliedRange, setAppliedRange] = useState(initialData.range);
   const [customFrom, setCustomFrom] = useState(initialData.range.from);
   const [customTo, setCustomTo] = useState(initialData.range.to);
+  const [isCustomRangeOpen, setIsCustomRangeOpen] = useState(
+    initialData.range.period === "custom",
+  );
   const [filterError, setFilterError] = useState("");
   const [isPlanEditing, setIsPlanEditing] = useState(false);
   const [isSavingPlan, setIsSavingPlan] = useState(false);
@@ -261,8 +264,12 @@ export function DashboardClient({
   const noContactPercent = newLeads ? Math.round((missed / newLeads) * 100) : 0;
   const contactPercent = newLeads ? Math.round((contact / newLeads) * 100) : 0;
   const selectPeriod = (nextPeriod: Exclude<DashboardPeriod, "custom">) => {
+    setIsCustomRangeOpen(false);
     if (nextPeriod === appliedRange.period && !isRefreshing) return;
     void refresh({ period: nextPeriod });
+  };
+  const openCustomPeriod = () => {
+    setIsCustomRangeOpen(true);
   };
   const applyCustomPeriod = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -353,14 +360,17 @@ export function DashboardClient({
           </div>
           <div className="toolbar-controls">
             <div className="period-switcher" role="group" aria-label="Быстрый выбор периода">
-              <button type="button" className={appliedRange.period === "week" ? "active" : ""} onClick={() => selectPeriod("week")}>Последние 7 дней</button>
-              <button type="button" className={appliedRange.period === "month" ? "active" : ""} onClick={() => selectPeriod("month")}>Этот месяц</button>
+              <button type="button" className={appliedRange.period === "week" && !isCustomRangeOpen ? "active" : ""} onClick={() => selectPeriod("week")}>Неделя</button>
+              <button type="button" className={appliedRange.period === "month" && !isCustomRangeOpen ? "active" : ""} onClick={() => selectPeriod("month")}>Этот месяц</button>
+              <button type="button" className={isCustomRangeOpen ? "active" : ""} onClick={openCustomPeriod}>Свои даты</button>
             </div>
-            <form className="date-range-form" onSubmit={applyCustomPeriod}>
-              <label><span>С</span><input type="date" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} required /></label>
-              <label><span>По</span><input type="date" value={customTo} onChange={(event) => setCustomTo(event.target.value)} required /></label>
-              <button type="submit" disabled={isRefreshing}>Применить</button>
-            </form>
+            {isCustomRangeOpen && (
+              <form className="date-range-form" onSubmit={applyCustomPeriod}>
+                <label><span>С</span><input type="date" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} required /></label>
+                <label><span>По</span><input type="date" value={customTo} onChange={(event) => setCustomTo(event.target.value)} required /></label>
+                <button type="submit" disabled={isRefreshing}>Применить</button>
+              </form>
+            )}
             {filterError ? <small className="filter-error">{filterError}</small> : <small>Единый период для всех показателей</small>}
           </div>
         </div>
