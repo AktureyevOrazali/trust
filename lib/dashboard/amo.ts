@@ -273,6 +273,18 @@ function kevCountsByDate(events: Iterable<AmoEvent>): Record<string, number> {
   return counts;
 }
 
+function addKevPassedByManager(
+  managerMap: Map<number, ManagerSnapshot>,
+  users: Map<number, string>,
+  leads: AmoLead[],
+  kevEvents: Map<number, AmoEvent>,
+) {
+  for (const lead of leads) {
+    if (lead.status_id !== KEV_STATUS_ID && !kevEvents.has(lead.id)) continue;
+    ensureManager(managerMap, users, lead.responsible_user_id).kevPassed += 1;
+  }
+}
+
 function ensureManager(
   managerMap: Map<number, ManagerSnapshot>,
   users: Map<number, string>,
@@ -370,10 +382,7 @@ async function getLiveAmoDashboardData(
 
   const uniqueKev = uniqueKevEvents(kevEvents);
   const kevCount = uniqueKev.size;
-  for (const event of uniqueKev.values()) {
-    if (!event.created_by) continue;
-    ensureManager(managerMap, users, event.created_by).kevPassed += 1;
-  }
+  addKevPassedByManager(managerMap, users, activeLeads, uniqueKev);
 
   return {
     connected: true,
@@ -434,7 +443,7 @@ async function getStoredAmoDashboardData(
          WHERE source = 'amo' AND entity_type = 'users'`,
       ).all(),
       db.prepare(
-        `SELECT CAST(json_extract(payload, '$.created_at') AS INTEGER) AS created_at
+        `SELECT payload
          FROM integration_records
          WHERE source = 'amo' AND entity_type = 'leads'
            AND CAST(json_extract(payload, '$.pipeline_id') AS INTEGER) = ?
@@ -503,20 +512,17 @@ async function getStoredAmoDashboardData(
   );
   const uniqueKev = uniqueKevEvents(storedKevEvents);
   const kevCount = uniqueKev.size;
-  for (const event of uniqueKev.values()) {
-    if (!event.created_by) continue;
-    ensureManager(managerMap, users, event.created_by).kevPassed += 1;
-  }
-
-  const leadsForTrend = (createdResult.results as Array<{ created_at: number }>).map(
-    (row, index) => ({
-      id: index,
-      pipeline_id: PIPELINE_ID,
-      status_id: 0,
-      responsible_user_id: 0,
-      created_at: Number(row.created_at),
-    }),
+  const storedLeads = (createdResult.results as Array<{ payload: string }>).map(
+    (row) => JSON.parse(row.payload) as AmoLead,
   );
+  addKevPassedByManager(
+    managerMap,
+    users,
+    storedLeads.filter((lead) => !CLOSED_STATUS_IDS.has(lead.status_id)),
+    uniqueKev,
+  );
+
+  const leadsForTrend = storedLeads;
   return {
     connected: true,
     sourceStatus: "stored",
