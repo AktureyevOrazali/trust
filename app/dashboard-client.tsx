@@ -83,7 +83,7 @@ function KpiCard({
 }: {
   label: string;
   value: string | number;
-  tone?: "light" | "jade" | "amber" | "coral" | "blue";
+  tone?: "light" | "jade" | "amber" | "coral" | "blue" | "gray";
 }) {
   return (
     <article className={`kpi-card kpi-${tone}`}>
@@ -378,7 +378,7 @@ export function DashboardClient({
         <KpiCard label="Новые · касса" value={nf.format(cash) + " ₸"} tone="jade" />
         <KpiCard label="Повторные · касса" value={nf.format(repeatCash) + " ₸"} tone="amber" />
         <KpiCard label="Бронь · касса" value={nf.format(bookingCash) + " ₸"} tone="blue" />
-        <KpiCard label="Не определено" value={nf.format(unspecifiedCash) + " ₸"} tone="light" />
+        <KpiCard label="Не определено" value={nf.format(unspecifiedCash) + " ₸"} tone="gray" />
         <KpiCard label="Новые продажи / лиды" value={leadToSale} tone="light" />
         <KpiCard label="Средний чек" value={nf.format(averageCheck) + " ₸"} tone="light" />
       </section>

@@ -419,6 +419,17 @@ select {
   color: rgba(255, 255, 255, 0.73);
 }
 
+.kpi-gray {
+  color: #364541;
+  border-color: #cbd1ce;
+  background: #e2e5e2;
+}
+
+.kpi-gray p,
+.kpi-gray span {
+  color: #687571;
+}
+
 .article-breakdown {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
