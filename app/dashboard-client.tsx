@@ -236,7 +236,11 @@ export function DashboardClient({
       dateKey: leadDay.date,
       date: leadDay.label,
       newLeads: leadDay.value,
-      cash: alphaDay?.cash ?? 0,
+      cash: alphaDay?.firstChineseCash ?? 0,
+      repeatCash: alphaDay?.repeatChineseCash ?? 0,
+      bookingCash: alphaDay?.bookingCash ?? 0,
+      payments: alphaDay?.payments ?? 0,
+      kev: data.kevByDate[leadDay.date] ?? 0,
       isToday: leadDay.isToday,
       isFuture: todayIndex >= 0 && index > todayIndex,
     };
@@ -253,8 +257,6 @@ export function DashboardClient({
   const bookingCash = bookingSales.reduce((sum, sale) => sum + sale.amount, 0);
   const unspecifiedCash = unspecifiedSales.reduce((sum, sale) => sum + sale.amount, 0);
   const averageCheck = firstSales ? Math.round(cash / firstSales) : 0;
-  const maxDailyLeads = Math.max(...dailyRows.map((day) => day.newLeads), 1);
-  const maxDailyCash = Math.max(...dailyRows.map((day) => day.cash), 1);
   const periodLabel = rangeLabel(appliedRange);
   const leadToSale = percent(firstSales, newLeads);
   const noContactPercent = newLeads ? Math.round((missed / newLeads) * 100) : 0;
@@ -486,22 +488,23 @@ export function DashboardClient({
           </div>
           <p>{periodLabel}</p>
         </div>
-        <div className="combo-chart" role="img" aria-label="Сравнение новых лидов и кассы по дням">
-          <div className="chart-legend"><span className="leads-legend">Новые лиды</span><span className="cash-legend">Касса</span></div>
-          <div className="chart-scroll">
-            {dailyRows.map((day) => {
-              const dailyCash = day.cash;
-              return (
-                <div className="chart-day" key={day.dateKey} title={`${day.date}: ${day.newLeads} лидов, ${nf.format(dailyCash)} ₸`}>
-                  <div className="chart-bars">
-                    <i className="leads-bar" style={{ "--height": `${Math.max(day.newLeads ? 8 : 0, (day.newLeads / maxDailyLeads) * 100)}%` } as CSSProperties} />
-                    <i className="cash-bar" style={{ "--height": `${Math.max(dailyCash ? 8 : 0, (dailyCash / maxDailyCash) * 100)}%` } as CSSProperties} />
-                  </div>
-                  <span>{day.date}</span>
-                </div>
-              );
-            })}
-          </div>
+        <div className="daily-scroll">
+          {dailyRows.map((day) => (
+            <article className={`day-card ${day.isToday ? "today" : ""} ${day.isFuture ? "future" : ""}`} key={day.dateKey}>
+              <div className="day-title">
+                <strong>{day.date}</strong>
+                {day.isToday && <span>сегодня</span>}
+              </div>
+              <dl>
+                <div><dt>Новые лиды</dt><dd>{day.isFuture ? "—" : day.newLeads}</dd></div>
+                <div><dt>Новые продажи</dt><dd>{day.isFuture ? "—" : nf.format(day.cash) + " ₸"}</dd></div>
+                <div><dt>Повторные</dt><dd>{day.isFuture ? "—" : nf.format(day.repeatCash) + " ₸"}</dd></div>
+                <div><dt>Бронь</dt><dd>{day.isFuture ? "—" : nf.format(day.bookingCash) + " ₸"}</dd></div>
+                <div><dt>КЭВ</dt><dd>{day.isFuture ? "—" : day.kev}</dd></div>
+                <div><dt>Оплаты</dt><dd>{day.isFuture ? "—" : day.payments}</dd></div>
+              </dl>
+            </article>
+          ))}
         </div>
       </section>
 

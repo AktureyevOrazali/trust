@@ -48,6 +48,7 @@ export interface AmoDashboardData {
   managers: ManagerSnapshot[];
   trend: TrendPoint[];
   kevCount: number;
+  kevByDate: Record<string, number>;
   updatedAt: string;
 }
 
@@ -132,6 +133,7 @@ function emptyAmoData(range: DashboardRange, message: string): AmoDashboardData 
       return { date: key, label: dateLabel(date), value: 0, isToday: key === todayKey };
     }),
     kevCount: 0,
+    kevByDate: {},
     updatedAt: "нет данных",
   };
 }
@@ -261,6 +263,15 @@ function uniqueKevEvents(events: AmoEvent[]): Map<number, AmoEvent> {
   return byLead;
 }
 
+function kevCountsByDate(events: Iterable<AmoEvent>): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const event of events) {
+    const key = dateKey(event.created_at);
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
+}
+
 function ensureManager(
   managerMap: Map<number, ManagerSnapshot>,
   users: Map<number, string>,
@@ -355,7 +366,8 @@ async function getLiveAmoDashboardData(
       (manager.stageCounts[String(lead.status_id)] ?? 0) + 1;
   }
 
-  const kevCount = uniqueKevEvents(kevEvents).size;
+  const uniqueKev = uniqueKevEvents(kevEvents);
+  const kevCount = uniqueKev.size;
 
   return {
     connected: true,
@@ -372,6 +384,7 @@ async function getLiveAmoDashboardData(
     // Новые лиды считаются по дате создания и не исчезают после закрытия сделки.
     trend: buildTrend(pipelineLeads, range),
     kevCount,
+    kevByDate: kevCountsByDate(uniqueKev.values()),
     updatedAt: formatUpdatedAt(Date.now()),
   };
 }
@@ -479,11 +492,11 @@ async function getStoredAmoDashboardData(
     manager.stageCounts[String(row.status_id)] = Number(row.count);
   }
 
-  const kevCount = uniqueKevEvents(
-    (kevResult.results as Array<{ payload: string }>).map(
-      (row) => JSON.parse(row.payload) as AmoEvent,
-    ),
-  ).size;
+  const storedKevEvents = (kevResult.results as Array<{ payload: string }>).map(
+    (row) => JSON.parse(row.payload) as AmoEvent,
+  );
+  const uniqueKev = uniqueKevEvents(storedKevEvents);
+  const kevCount = uniqueKev.size;
 
   const leadsForTrend = (createdResult.results as Array<{ created_at: number }>).map(
     (row, index) => ({
@@ -505,6 +518,7 @@ async function getStoredAmoDashboardData(
     managers: [...managerMap.values()].sort((a, b) => b.total - a.total),
     trend: buildTrend(leadsForTrend, range),
     kevCount,
+    kevByDate: kevCountsByDate(uniqueKev.values()),
     updatedAt: run?.completed_at ? formatUpdatedAt(run.completed_at) : "нет данных",
   };
 }
