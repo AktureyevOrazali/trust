@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useState,
   type CSSProperties,
   type FormEvent,
@@ -142,7 +141,6 @@ export function DashboardClient({
 }) {
   const [data, setData] = useState(initialData);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [managerId, setManagerId] = useState("all");
   const [appliedRange, setAppliedRange] = useState(initialData.range);
   const [customFrom, setCustomFrom] = useState(initialData.range.from);
   const [customTo, setCustomTo] = useState(initialData.range.to);
@@ -197,33 +195,15 @@ export function DashboardClient({
     return () => window.clearInterval(interval);
   }, [appliedRange, refresh]);
 
-  const selectedManager = data.managers.find(
-    (manager) => String(manager.id) === managerId,
-  );
-  const stages = useMemo(
-    () => {
-      const pipelineStages = data.stages.map((stage) => ({
-        ...stage,
-        count: selectedManager
-          ? selectedManager.stageCounts[String(stage.id)] ?? 0
-          : stage.count,
-      }));
-      if (selectedManager || !data.unsorted) return pipelineStages;
-      return [
-        { id: -1, name: "Неразобранное", count: data.unsorted, amount: 0, sort: -1 },
-        ...pipelineStages,
-      ];
-    },
-    [data.stages, data.unsorted, selectedManager],
-  );
+  const stages = data.unsorted
+    ? [{ id: -1, name: "Неразобранное", count: data.unsorted, amount: 0, sort: -1 }, ...data.stages]
+    : data.stages;
 
   const missed = findStage(stages, "недоз");
   const contact = findStage(stages, "контакт");
   const booked = findStage(stages, "записан");
   const trial = findStage(data.stages, "кэв");
-  const activeDeals = selectedManager
-    ? selectedManager.total
-    : data.activeDeals + data.unsorted;
+  const activeDeals = data.activeDeals + data.unsorted;
   const todayIndex = data.trend.findIndex((day) => day.isToday);
   const monthTitle = new Intl.DateTimeFormat("ru-RU", {
     month: "long",
@@ -428,7 +408,7 @@ export function DashboardClient({
             <div>
               <h2>Где теряются лиды</h2>
             </div>
-            <p>{activeDeals} сделок в работе{!selectedManager && data.unsorted ? ` · ${data.unsorted} неразобранное` : ""}</p>
+            <p>{activeDeals} сделок в работе{data.unsorted ? ` · ${data.unsorted} неразобранное` : ""}</p>
           </div>
           <div className="funnel-list">
             {stages.map((stage, index) => {
@@ -509,22 +489,15 @@ export function DashboardClient({
       </section>
 
       <section className="section-panel table-panel">
-        <div className="section-heading team-heading">
+        <div className="section-heading">
           <div>
             <h2>Менеджеры и этапы</h2>
-          </div>
-          <div className="manager-filter">
-            <label htmlFor="manager">Фокус воронки</label>
-            <select id="manager" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
-              <option value="all">Все менеджеры</option>
-              {data.managers.map((manager) => <option key={manager.id} value={manager.id}>{manager.name}</option>)}
-            </select>
           </div>
         </div>
         <div className="table-scroll">
           <table>
             <thead>
-              <tr><th>Менеджер</th><th>В работе</th><th>Без контакта</th><th>Контакт</th><th>На пробный</th><th>КЭВ сейчас</th><th>Доля на пробном</th></tr>
+              <tr><th>Менеджер</th><th>В работе</th><th>Без контакта</th><th>Контакт</th><th>На пробный</th><th>Прошли КЭВ</th><th>КЭВ сейчас</th><th>Доля на пробном</th></tr>
             </thead>
             <tbody>
               {data.managers.map((manager) => {
@@ -536,6 +509,7 @@ export function DashboardClient({
                     <td>{manager.stageCounts["85172050"] ?? 0}</td>
                     <td>{manager.stageCounts["85171898"] ?? 0}</td>
                     <td>{managerBooked}</td>
+                    <td>{manager.kevPassed}</td>
                     <td>{manager.stageCounts["85172062"] ?? 0}</td>
                     <td><span className="conversion-chip">{percent(managerBooked, manager.total)}</span></td>
                   </tr>

@@ -28,6 +28,7 @@ export interface ManagerSnapshot {
   name: string;
   total: number;
   stageCounts: Record<string, number>;
+  kevPassed: number;
 }
 
 export interface TrendPoint {
@@ -284,6 +285,7 @@ function ensureManager(
     name: users.get(userId) ?? `Менеджер ${userId}`,
     total: 0,
     stageCounts: {},
+    kevPassed: 0,
   };
   managerMap.set(userId, manager);
   return manager;
@@ -368,6 +370,10 @@ async function getLiveAmoDashboardData(
 
   const uniqueKev = uniqueKevEvents(kevEvents);
   const kevCount = uniqueKev.size;
+  for (const event of uniqueKev.values()) {
+    if (!event.created_by) continue;
+    ensureManager(managerMap, users, event.created_by).kevPassed += 1;
+  }
 
   return {
     connected: true,
@@ -497,6 +503,10 @@ async function getStoredAmoDashboardData(
   );
   const uniqueKev = uniqueKevEvents(storedKevEvents);
   const kevCount = uniqueKev.size;
+  for (const event of uniqueKev.values()) {
+    if (!event.created_by) continue;
+    ensureManager(managerMap, users, event.created_by).kevPassed += 1;
+  }
 
   const leadsForTrend = (createdResult.results as Array<{ created_at: number }>).map(
     (row, index) => ({
