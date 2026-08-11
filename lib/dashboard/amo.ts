@@ -230,7 +230,7 @@ function kevEventQueryPath(range: DashboardRange): string {
 }
 
 function buildTrend(
-  leads: AmoLead[],
+  leads: Array<{ created_at: number }>,
   range: DashboardRange,
 ): TrendPoint[] {
   const countsByDate = new Map<string, number>();
@@ -396,8 +396,14 @@ async function getLiveAmoDashboardData(
     unsorted: currentUnsorted.length,
     stages,
     managers: [...managerMap.values()].sort((a, b) => b.total - a.total),
-    // Новые лиды считаются по дате создания и не исчезают после закрытия сделки.
-    trend: buildTrend(pipelineLeads, range),
+    // Новые лиды считаются по дате создания и включают неразобранные заявки.
+    trend: buildTrend(
+      [
+        ...pipelineLeads,
+        ...currentUnsorted.map((item) => ({ created_at: Number(item.created_at ?? 0) })),
+      ],
+      range,
+    ),
     kevCount,
     kevByDate: kevCountsByDate(uniqueKev.values()),
     updatedAt: formatUpdatedAt(Date.now()),
@@ -532,7 +538,13 @@ async function getStoredAmoDashboardData(
     unsorted: unsortedResult.results.length,
     stages,
     managers: [...managerMap.values()].sort((a, b) => b.total - a.total),
-    trend: buildTrend(leadsForTrend, range),
+    trend: buildTrend(
+      [
+        ...leadsForTrend,
+        ...(unsortedResult.results as Array<{ created_at: number }>),
+      ],
+      range,
+    ),
     kevCount,
     kevByDate: kevCountsByDate(uniqueKev.values()),
     updatedAt: run?.completed_at ? formatUpdatedAt(run.completed_at) : "нет данных",
