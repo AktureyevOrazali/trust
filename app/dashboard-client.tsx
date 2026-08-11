@@ -195,15 +195,18 @@ export function DashboardClient({
     return () => window.clearInterval(interval);
   }, [appliedRange, refresh]);
 
+  const pipelineStages = data.stages.filter(
+    (stage) => !stage.name.toLocaleLowerCase("ru").includes("неразобран"),
+  );
   const stages = data.unsorted
-    ? [{ id: -1, name: "Неразобранное", count: data.unsorted, amount: 0, sort: -1 }, ...data.stages]
-    : data.stages;
+    ? [{ id: -1, name: "Неразобранные заявки", count: data.unsorted, amount: 0, sort: -1 }, ...pipelineStages]
+    : pipelineStages;
 
   const missed = findStage(stages, "недоз");
   const contact = findStage(stages, "контакт");
   const booked = findStage(stages, "записан");
   const trial = findStage(data.stages, "кэв");
-  const activeDeals = data.activeDeals + data.unsorted;
+  const funnelTotal = stages.reduce((sum, stage) => sum + stage.count, 0);
   const todayIndex = data.trend.findIndex((day) => day.isToday);
   const monthTitle = new Intl.DateTimeFormat("ru-RU", {
     month: "long",
@@ -406,9 +409,9 @@ export function DashboardClient({
         <article className="section-panel funnel-panel">
           <div className="section-heading">
             <div>
-              <h2>Где теряются лиды</h2>
+              <h2>Распределение лидов по этапам</h2>
             </div>
-            <p>{activeDeals} сделок в работе{data.unsorted ? ` · ${data.unsorted} неразобранное` : ""}</p>
+            <p>{funnelTotal} лидов за период</p>
           </div>
           <div className="funnel-list">
             {stages.map((stage, index) => {

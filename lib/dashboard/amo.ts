@@ -354,9 +354,8 @@ async function getLiveAmoDashboardData(
   });
   const statusDefinitions = pipeline._embedded?.statuses ?? [];
   const stages = statusDefinitions
-    .filter((status) => !CLOSED_STATUS_IDS.has(status.id))
     .map((status) => {
-      const leads = activeLeads.filter((lead) => lead.status_id === status.id);
+      const leads = pipelineLeads.filter((lead) => lead.status_id === status.id);
       return {
         id: status.id,
         name: status.name,
@@ -426,7 +425,6 @@ async function getStoredAmoDashboardData(
          WHERE source = 'amo' AND entity_type = 'leads'
            AND CAST(json_extract(payload, '$.pipeline_id') AS INTEGER) = ?
            AND CAST(json_extract(payload, '$.created_at') AS INTEGER) BETWEEN ? AND ?
-           AND CAST(json_extract(payload, '$.status_id') AS INTEGER) NOT IN (142, 143)
          GROUP BY status_id`,
       ).bind(PIPELINE_ID, periodStart, periodEnd).all(),
       db.prepare(
@@ -491,7 +489,6 @@ async function getStoredAmoDashboardData(
     ),
   );
   const stages = [...statusMap.entries()]
-    .filter(([statusId]) => !CLOSED_STATUS_IDS.has(statusId))
     .map(([id, definition]) => ({
       id,
       name: definition.name,
