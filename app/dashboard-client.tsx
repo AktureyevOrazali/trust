@@ -96,26 +96,6 @@ function KpiCard({
   );
 }
 
-function ArticleCard({
-  label,
-  amount,
-  count,
-  tone,
-}: {
-  label: string;
-  amount: number;
-  count: number;
-  tone: "first" | "repeat" | "booking" | "unknown";
-}) {
-  return (
-    <article className={"article-card article-" + tone}>
-      <span>{label}</span>
-      <strong>{nf.format(amount) + " ₸"}</strong>
-      <small>{count} оплат</small>
-    </article>
-  );
-}
-
 type PlanField = keyof MonthlyPlanInput;
 
 function planValue(field: PlanField, value: number) {
@@ -256,18 +236,11 @@ export function DashboardClient({
       dateKey: leadDay.date,
       date: leadDay.label,
       newLeads: leadDay.value,
-      cash: alphaDay?.firstChineseCash ?? 0,
-      repeatCash: alphaDay?.repeatChineseCash ?? 0,
-      bookingCash: alphaDay?.bookingCash ?? 0,
-      payments: alphaDay?.payments ?? 0,
-      activations: alphaDay?.activations ?? 0,
-      firstSales: alphaDay?.firstSales ?? 0,
-      repeatSales: alphaDay?.repeatSales ?? 0,
+      cash: alphaDay?.cash ?? 0,
       isToday: leadDay.isToday,
       isFuture: todayIndex >= 0 && index > todayIndex,
     };
   });
-  const periodRows = dailyRows;
   const newLeads = data.trend.reduce((sum, day) => sum + day.value, 0);
   const firstChineseSales = data.alfa.sales.filter((sale) => articleGroup(sale.category) === "first");
   const repeatChineseSales = data.alfa.sales.filter((sale) => articleGroup(sale.category) === "repeat");
@@ -281,37 +254,8 @@ export function DashboardClient({
   const unspecifiedCash = unspecifiedSales.reduce((sum, sale) => sum + sale.amount, 0);
   const totalRevenue = cash + repeatCash + bookingCash + unspecifiedCash;
   const averageCheck = firstSales ? Math.round(cash / firstSales) : 0;
-  const averagePayment = data.alfa.sales.length
-    ? Math.round(totalRevenue / data.alfa.sales.length)
-    : 0;
-  const revenuePerLead = newLeads ? Math.round(totalRevenue / newLeads) : 0;
-  const repeatShare = percent(repeatCash, totalRevenue);
   const maxDailyLeads = Math.max(...dailyRows.map((day) => day.newLeads), 1);
-  const maxDailyCash = Math.max(
-    ...dailyRows.map((day) => day.cash + day.repeatCash + day.bookingCash),
-    1,
-  );
-  const bestCashDay = dailyRows.reduce(
-    (best, day) =>
-      day.cash + day.repeatCash + day.bookingCash >
-      best.cash + best.repeatCash + best.bookingCash
-        ? day
-        : best,
-    dailyRows[0] ?? {
-      dateKey: "",
-      date: "—",
-      newLeads: 0,
-      cash: 0,
-      repeatCash: 0,
-      bookingCash: 0,
-      payments: 0,
-      activations: 0,
-      firstSales: 0,
-      repeatSales: 0,
-      isToday: false,
-      isFuture: false,
-    },
-  );
+  const maxDailyCash = Math.max(...dailyRows.map((day) => day.cash), 1);
   const periodLabel = rangeLabel(appliedRange);
   const leadToSale = percent(firstSales, newLeads);
   const noContactPercent = newLeads ? Math.round((missed / newLeads) * 100) : 0;
@@ -396,58 +340,29 @@ export function DashboardClient({
         </div>
       </header>
 
-      <section className="dashboard-toolbar" aria-label="Фильтр даты">
-        <div className="toolbar-period">
-          <span>Период отчёта</span>
-          <strong>{periodLabel}</strong>
-        </div>
-        <div className="toolbar-controls">
-          <div className="period-switcher" role="group" aria-label="Быстрый выбор периода">
-            <button
-              type="button"
-              className={appliedRange.period === "week" ? "active" : ""}
-              onClick={() => selectPeriod("week")}
-            >
-              Последние 7 дней
-            </button>
-            <button
-              type="button"
-              className={appliedRange.period === "month" ? "active" : ""}
-              onClick={() => selectPeriod("month")}
-            >
-              Этот месяц
-            </button>
-          </div>
-          <form className="date-range-form" onSubmit={applyCustomPeriod}>
-            <label>
-              <span>С</span>
-              <input
-                type="date"
-                value={customFrom}
-                onChange={(event) => setCustomFrom(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              <span>По</span>
-              <input
-                type="date"
-                value={customTo}
-                onChange={(event) => setCustomTo(event.target.value)}
-                required
-              />
-            </label>
-            <button type="submit" disabled={isRefreshing}>Применить</button>
-          </form>
-          {filterError ? <small className="filter-error">{filterError}</small> : <small>Один период для amoCRM, AlphaCRM, КЭВ и всех графиков.</small>}
-        </div>
-      </section>
-
       <section className="overview-bar" id="overview">
         <div>
           <p className="section-kicker">Образовательный центр китайского языка</p>
           <h1>Результат продаж</h1>
           <p className="overview-copy">Ключевые показатели для руководителя</p>
+        </div>
+        <div className="dashboard-toolbar" aria-label="Фильтр даты">
+          <div className="toolbar-period">
+            <span>Период отчёта</span>
+            <strong>{periodLabel}</strong>
+          </div>
+          <div className="toolbar-controls">
+            <div className="period-switcher" role="group" aria-label="Быстрый выбор периода">
+              <button type="button" className={appliedRange.period === "week" ? "active" : ""} onClick={() => selectPeriod("week")}>Последние 7 дней</button>
+              <button type="button" className={appliedRange.period === "month" ? "active" : ""} onClick={() => selectPeriod("month")}>Этот месяц</button>
+            </div>
+            <form className="date-range-form" onSubmit={applyCustomPeriod}>
+              <label><span>С</span><input type="date" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} required /></label>
+              <label><span>По</span><input type="date" value={customTo} onChange={(event) => setCustomTo(event.target.value)} required /></label>
+              <button type="submit" disabled={isRefreshing}>Применить</button>
+            </form>
+            {filterError ? <small className="filter-error">{filterError}</small> : <small>Единый период для всех показателей</small>}
+          </div>
         </div>
       </section>
 
@@ -459,16 +374,19 @@ export function DashboardClient({
           tone="coral"
         />
         <KpiCard label="Новые продажи" value={nf.format(firstSales)} note="статья «Перв Китайский»" tone="jade" />
-        <KpiCard label="Касса" value={nf.format(totalRevenue) + " ₸"} note={nf.format(data.alfa.sales.length) + " подтверждённых оплат"} tone="amber" />
+        <article className="kpi-card kpi-amber cash-kpi">
+          <p>Касса</p>
+          <strong>{nf.format(totalRevenue)} ₸</strong>
+          <div className="cash-kpi-breakdown">
+            <span>Первичная <b>{nf.format(cash)} ₸</b></span>
+            <span>Повторная <b>{nf.format(repeatCash)} ₸</b></span>
+            <span>Бронь <b>{nf.format(bookingCash)} ₸</b></span>
+            {unspecifiedCash > 0 && <span>Не указано <b>{nf.format(unspecifiedCash)} ₸</b></span>}
+          </div>
+          <small>{nf.format(data.alfa.sales.length)} подтверждённые оплаты</small>
+        </article>
         <KpiCard label="Новые продажи / лиды" value={leadToSale} note={firstSales + " оплат «Перв Китайский» ÷ " + newLeads + " лидов"} tone="light" />
         <KpiCard label="Средний чек" value={nf.format(averageCheck) + " ₸"} note="по статье «Перв Китайский»" tone="light" />
-        <KpiCard label="Оплаты" value={nf.format(data.alfa.sales.length)} note="операции AlphaCRM за период" tone="light" />
-      </section>
-
-      <section className="article-breakdown" aria-label="Продажи по статьям AlfaCRM">
-        <ArticleCard label="Не указано" amount={unspecifiedCash} count={unspecifiedSales.length} tone="unknown" />
-        <ArticleCard label="Повт Китайский · повторная касса" amount={repeatCash} count={repeatSales} tone="repeat" />
-        <ArticleCard label="Бронь" amount={bookingCash} count={bookingSales.length} tone="booking" />
       </section>
 
       <section className="plan-panel" aria-label="План месяца">
@@ -511,16 +429,6 @@ export function DashboardClient({
         )}
       </section>
 
-      <section className="metric-explainer" aria-label="Как читать показатели"> 
-        <strong>Как читать цифры</strong>
-        <p>
-          Касса считается только по статье «Перв Китайский». Статья «Повт Китайский» попадает только в повторную кассу, а «Бронь» и «Не указано» отображаются отдельно. Средний чек — касса, делённая на количество оплат «Перв Китайский».
-        </p>
-        <p>
-          «Новые продажи / лиды» — оперативное соотношение за один период, а не сквозная конверсия одного и того же клиента. Графики ниже сопоставляют дату создания лида в amoCRM с датой подтверждённой оплаты в AlphaCRM.
-        </p>
-      </section>
-
       <section className="executive-grid">
         <article className="section-panel funnel-panel">
           <div className="section-heading">
@@ -557,12 +465,19 @@ export function DashboardClient({
         </article>
 
         <article className="section-panel focus-panel">
-          <div className="focus-symbol">中</div>
-          <p className="section-kicker">Точка внимания</p>
-          <h2>{missed} лидов ещё не получили качественный контакт</h2>
-          <p>
-            Это {percent(missed, newLeads)} от новых лидов выбранного периода. Контакт сделан у {contact} лидов, а на пробный урок записаны {booked}.
-          </p>
+          <div className="focus-heading">
+            <p className="section-kicker">Приоритет команды</p>
+            <span>воронка продаж</span>
+          </div>
+          <div className="focus-main">
+            <span>Без качественного контакта</span>
+            <strong>{missed}</strong>
+            <p>лидов требуют обработки</p>
+          </div>
+          <div className="focus-progress" aria-label={`${percent(missed, newLeads)} лидов без контакта`}>
+            <div><span>Доля без контакта</span><strong>{percent(missed, newLeads)}</strong></div>
+            <i style={{ "--focus-width": percent(missed, newLeads) } as CSSProperties} />
+          </div>
           <div className="focus-stats">
             <div className="focus-stat">
               <span>Прошли через КЭВ</span>
@@ -576,41 +491,19 @@ export function DashboardClient({
         </article>
       </section>
 
-      <section className="section-panel analytics-panel" aria-label="Глубокая аналитика">
+      <section className="section-panel daily-chart-panel" aria-label="Динамика по дням">
         <div className="section-heading">
           <div>
-            <p className="section-kicker">Глубокая аналитика</p>
-            <h2>Деньги и поток лидов</h2>
+            <p className="section-kicker">Динамика</p>
+            <h2>Лиды и касса по дням</h2>
           </div>
           <p>{periodLabel}</p>
-        </div>
-        <div className="analytics-kpis">
-          <article>
-            <span>Выручка на новый лид</span>
-            <strong>{nf.format(revenuePerLead)} ₸</strong>
-            <small>вся касса AlphaCRM ÷ новые лиды amoCRM</small>
-          </article>
-          <article>
-            <span>Средний платёж</span>
-            <strong>{nf.format(averagePayment)} ₸</strong>
-            <small>касса ÷ все подтверждённые оплаты</small>
-          </article>
-          <article>
-            <span>Доля повторной кассы</span>
-            <strong>{repeatShare}</strong>
-            <small>{nf.format(repeatCash)} ₸ из {nf.format(totalRevenue)} ₸</small>
-          </article>
-          <article>
-            <span>Самый денежный день</span>
-            <strong>{bestCashDay.date}</strong>
-            <small>{nf.format(bestCashDay.cash + bestCashDay.repeatCash + bestCashDay.bookingCash)} ₸</small>
-          </article>
         </div>
         <div className="combo-chart" role="img" aria-label="Сравнение новых лидов и кассы по дням">
           <div className="chart-legend"><span className="leads-legend">Новые лиды</span><span className="cash-legend">Касса</span></div>
           <div className="chart-scroll">
             {dailyRows.map((day) => {
-              const dailyCash = day.cash + day.repeatCash + day.bookingCash;
+              const dailyCash = day.cash;
               return (
                 <div className="chart-day" key={day.dateKey} title={`${day.date}: ${day.newLeads} лидов, ${nf.format(dailyCash)} ₸`}>
                   <div className="chart-bars">
@@ -622,49 +515,6 @@ export function DashboardClient({
               );
             })}
           </div>
-        </div>
-        <div className="cash-mix-chart" role="img" aria-label="Структура кассы по статьям оплаты">
-          <div className="cash-mix-heading"><strong>Структура кассы</strong><span>{nf.format(totalRevenue)} ₸</span></div>
-          {[
-            { label: "Перв Китайский", amount: cash, tone: "new" },
-            { label: "Повт Китайский", amount: repeatCash, tone: "repeat" },
-            { label: "Бронь", amount: bookingCash, tone: "booking" },
-            { label: "Не указано", amount: unspecifiedCash, tone: "other" },
-          ].map((item) => (
-            <div className="cash-mix-row" key={item.label}>
-              <span>{item.label}</span>
-              <div><i className={`cash-mix-bar ${item.tone}`} style={{ "--cash-width": percent(item.amount, totalRevenue) } as CSSProperties} /></div>
-              <strong>{nf.format(item.amount)} ₸</strong>
-            </div>
-          ))}
-        </div>
-        <p className="panel-note">Выручка на лид — управленческий показатель периода: он сравнивает все подтверждённые оплаты с лидами, созданными в эти же даты, и не является когортной конверсией.</p>
-      </section>
-
-      <section className="section-panel">
-        <div className="section-heading">
-          <div>
-            <p className="section-kicker">Динамика</p>
-            <h2>Лиды и деньги по дням</h2>
-          </div>
-          <p>{periodLabel}</p>
-        </div>
-
-        <div className="daily-scroll">
-          {periodRows.map((day) => (
-            <article className={`day-card ${day.isToday ? "today" : ""} ${day.isFuture ? "future" : ""}`} key={day.dateKey}>
-              <div className="day-title">
-                <strong>{day.date}</strong>
-                {day.isToday && <span>сегодня</span>}
-              </div>
-              <dl>
-                <div><dt>Новые лиды</dt><dd>{day.isFuture ? "—" : day.newLeads}</dd></div>
-                <div><dt>Касса</dt><dd>{day.isFuture ? "—" : nf.format(day.cash) + " ₸"}</dd></div>
-                <div><dt>Повторная касса</dt><dd>{day.isFuture ? "—" : nf.format(day.repeatCash) + " ₸"}</dd></div>
-                <div><dt>Бронь</dt><dd>{day.isFuture ? "—" : nf.format(day.bookingCash) + " ₸"}</dd></div>
-              </dl>
-            </article>
-          ))}
         </div>
       </section>
 

@@ -33,7 +33,7 @@ test("counts stable amoCRM leads and historical KEV transitions", async () => {
   assert.match(amo, /sourceStatus: "cached"/);
 });
 
-test("limits AlphaCRM load and exposes financial analytics", async () => {
+test("limits AlphaCRM load and exposes a compact daily chart", async () => {
   const [alfa, client] = await Promise.all([
     source("lib/dashboard/alfa.ts"),
     source("app/dashboard-client.tsx"),
@@ -45,6 +45,8 @@ test("limits AlphaCRM load and exposes financial analytics", async () => {
   assert.match(client, /data\.kevCount/);
   assert.match(client, /className="focus-stats"/);
   assert.doesNotMatch(client, /kevLeads/);
-  assert.match(client, /className="cash-mix-chart"/);
+  assert.match(client, /className="cash-kpi-breakdown"/);
+  assert.doesNotMatch(client, /Глубокая аналитика/);
+  assert.doesNotMatch(client, /className="daily-scroll"/);
   assert.match(client, /className="combo-chart"/);
 });
