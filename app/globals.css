@@ -330,48 +330,13 @@ select {
 
 .executive-kpis {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 10px;
   margin-bottom: 16px;
 }
 
-.cash-kpi {
-  grid-column: auto;
-  justify-content: flex-start;
-}
-
-.cash-kpi > strong {
-  margin-top: 9px;
-}
-
-.cash-kpi-breakdown {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 3px;
-  margin-top: 1px;
-}
-
-.cash-kpi-breakdown span {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 8px;
-  white-space: nowrap;
-}
-
-.cash-kpi-breakdown b {
-  color: var(--ink);
-  font-weight: 800;
-}
-
-.cash-kpi > small {
-  margin-top: 5px;
-  color: #7c6725;
-  font-size: 8px;
-}
-
 .kpi-card {
-  min-height: 112px;
+  min-height: 104px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -1572,7 +1537,7 @@ td:first-child {
   }
 
   .executive-kpis {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .executive-grid {
@@ -1669,7 +1634,7 @@ td:first-child {
   }
 
   .kpi-card {
-    min-height: 112px;
+    min-height: 104px;
     padding: 15px;
   }
 

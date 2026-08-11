@@ -252,7 +252,6 @@ export function DashboardClient({
   const repeatCash = repeatChineseSales.reduce((sum, sale) => sum + sale.amount, 0);
   const bookingCash = bookingSales.reduce((sum, sale) => sum + sale.amount, 0);
   const unspecifiedCash = unspecifiedSales.reduce((sum, sale) => sum + sale.amount, 0);
-  const totalRevenue = cash + repeatCash + bookingCash + unspecifiedCash;
   const averageCheck = firstSales ? Math.round(cash / firstSales) : 0;
   const maxDailyLeads = Math.max(...dailyRows.map((day) => day.newLeads), 1);
   const maxDailyCash = Math.max(...dailyRows.map((day) => day.cash), 1);
@@ -376,10 +375,10 @@ export function DashboardClient({
           tone="coral"
         />
         <KpiCard label="Новые продажи" value={nf.format(firstSales)} tone="jade" />
-        <article className="kpi-card kpi-amber cash-kpi">
-          <p>Касса</p>
-          <strong>{nf.format(totalRevenue)} ₸</strong>
-        </article>
+        <KpiCard label="Новые · касса" value={nf.format(cash) + " ₸"} tone="jade" />
+        <KpiCard label="Повторные · касса" value={nf.format(repeatCash) + " ₸"} tone="amber" />
+        <KpiCard label="Бронь · касса" value={nf.format(bookingCash) + " ₸"} tone="coral" />
+        <KpiCard label="Не определено" value={nf.format(unspecifiedCash) + " ₸"} tone="light" />
         <KpiCard label="Новые продажи / лиды" value={leadToSale} tone="light" />
         <KpiCard label="Средний чек" value={nf.format(averageCheck) + " ₸"} tone="light" />
       </section>
