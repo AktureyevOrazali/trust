@@ -408,6 +408,17 @@ select {
   color: rgba(255, 255, 255, 0.73);
 }
 
+.kpi-blue {
+  color: white;
+  border-color: var(--blue);
+  background: var(--blue);
+}
+
+.kpi-blue p,
+.kpi-blue span {
+  color: rgba(255, 255, 255, 0.73);
+}
+
 .article-breakdown {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
