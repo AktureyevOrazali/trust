@@ -28,7 +28,6 @@ export interface ManagerSnapshot {
   name: string;
   total: number;
   stageCounts: Record<string, number>;
-  kevCount: number;
 }
 
 export interface TrendPoint {
@@ -36,14 +35,6 @@ export interface TrendPoint {
   label: string;
   value: number;
   isToday: boolean;
-}
-
-export interface KevLeadSnapshot {
-  id: number;
-  name: string;
-  manager: string;
-  enteredAt: string;
-  currentStage: string;
 }
 
 export interface AmoDashboardData {
@@ -57,7 +48,6 @@ export interface AmoDashboardData {
   managers: ManagerSnapshot[];
   trend: TrendPoint[];
   kevCount: number;
-  kevLeads: KevLeadSnapshot[];
   updatedAt: string;
 }
 
@@ -109,17 +99,6 @@ function formatUpdatedAt(timestamp: number): string {
   }).format(new Date(timestamp));
 }
 
-function formatEventDate(timestamp: number): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Qyzylorda",
-  }).format(new Date(timestamp * 1000));
-}
-
 function dateKey(timestamp: number): string {
   return new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
@@ -153,7 +132,6 @@ function emptyAmoData(range: DashboardRange, message: string): AmoDashboardData 
       return { date: key, label: dateLabel(date), value: 0, isToday: key === todayKey };
     }),
     kevCount: 0,
-    kevLeads: [],
     updatedAt: "нет данных",
   };
 }
@@ -248,33 +226,9 @@ function kevEventQueryPath(range: DashboardRange): string {
   return `/api/v4/events?${params.toString()}`;
 }
 
-async function leadsByIds(
-  baseUrl: string,
-  token: string,
-  ids: number[],
-): Promise<AmoLead[]> {
-  const leads: AmoLead[] = [];
-  for (let offset = 0; offset < ids.length; offset += 50) {
-    const params = new URLSearchParams();
-    for (const id of ids.slice(offset, offset + 50)) {
-      params.append("filter[id][]", String(id));
-    }
-    leads.push(
-      ...(await amoCollection<AmoLead>(
-        baseUrl,
-        token,
-        `/api/v4/leads?${params.toString()}`,
-        "leads",
-      )),
-    );
-  }
-  return leads;
-}
-
 function buildTrend(
   leads: AmoLead[],
   range: DashboardRange,
-  unsorted: AmoUnsorted[] = [],
 ): TrendPoint[] {
   const countsByDate = new Map<string, number>();
   for (const lead of leads) {
@@ -282,12 +236,6 @@ function buildTrend(
     const key = dateKey(lead.created_at);
     countsByDate.set(key, (countsByDate.get(key) ?? 0) + 1);
   }
-  for (const item of unsorted) {
-    if (!item.created_at) continue;
-    const key = dateKey(item.created_at);
-    countsByDate.set(key, (countsByDate.get(key) ?? 0) + 1);
-  }
-
   const todayKey = dateKey(Math.floor(Date.now() / 1000));
   return periodDates(range).map((date) => {
     const key = date.toISOString().slice(0, 10);
@@ -325,7 +273,6 @@ function ensureManager(
     name: users.get(userId) ?? `Менеджер ${userId}`,
     total: 0,
     stageCounts: {},
-    kevCount: 0,
   };
   managerMap.set(userId, manager);
   return manager;
@@ -381,10 +328,6 @@ async function getLiveAmoDashboardData(
     return createdAt >= start && createdAt <= end;
   });
   const statusDefinitions = pipeline._embedded?.statuses ?? [];
-  const statusNames = new Map(
-    statusDefinitions.map((status) => [status.id, status.name]),
-  );
-
   const stages = statusDefinitions
     .filter((status) => !CLOSED_STATUS_IDS.has(status.id))
     .map((status) => {
@@ -412,26 +355,7 @@ async function getLiveAmoDashboardData(
       (manager.stageCounts[String(lead.status_id)] ?? 0) + 1;
   }
 
-  const kevByLead = uniqueKevEvents(kevEvents);
-  const kevLeadDetails = await leadsByIds(baseUrl, token, [...kevByLead.keys()]);
-  const kevDetailsById = new Map(kevLeadDetails.map((lead) => [lead.id, lead]));
-  const kevLeads = [...kevByLead.entries()]
-    .map(([leadId, event]) => {
-      const lead = kevDetailsById.get(leadId);
-      const managerId = lead?.responsible_user_id ?? event.created_by;
-      const manager = ensureManager(managerMap, users, managerId);
-      manager.kevCount += 1;
-      return {
-        id: leadId,
-        name: lead?.name ?? `Сделка #${leadId}`,
-        manager: manager.name,
-        enteredAt: formatEventDate(event.created_at),
-        currentStage: lead
-          ? statusNames.get(lead.status_id) ?? `Этап ${lead.status_id}`
-          : "Сделка недоступна",
-      };
-    })
-    .sort((a, b) => b.enteredAt.localeCompare(a.enteredAt));
+  const kevCount = uniqueKevEvents(kevEvents).size;
 
   return {
     connected: true,
@@ -446,9 +370,8 @@ async function getLiveAmoDashboardData(
     stages,
     managers: [...managerMap.values()].sort((a, b) => b.total - a.total),
     // Новые лиды считаются по дате создания и не исчезают после закрытия сделки.
-    trend: buildTrend(pipelineLeads, range, currentUnsorted),
-    kevCount: kevLeads.length,
-    kevLeads,
+    trend: buildTrend(pipelineLeads, range),
+    kevCount,
     updatedAt: formatUpdatedAt(Date.now()),
   };
 }
@@ -511,16 +434,13 @@ async function getStoredAmoDashboardData(
            AND CAST(json_extract(payload, '$.created_at') AS INTEGER) BETWEEN ? AND ?`,
       ).bind(PIPELINE_ID, periodStart, periodEnd).all(),
       db.prepare(
-        `SELECT e.payload AS event_payload, l.payload AS lead_payload
-         FROM integration_records e
-         LEFT JOIN integration_records l
-           ON l.source = 'amo' AND l.entity_type = 'leads'
-          AND l.external_id = CAST(json_extract(e.payload, '$.entity_id') AS TEXT)
-         WHERE e.source = 'amo' AND e.entity_type = 'events'
-           AND json_extract(e.payload, '$.type') = 'lead_status_changed'
-           AND CAST(json_extract(e.payload, '$.created_at') AS INTEGER) BETWEEN ? AND ?
-           AND CAST(json_extract(e.payload, '$.value_after[0].lead_status.id') AS INTEGER) = ?
-           AND CAST(json_extract(e.payload, '$.value_after[0].lead_status.pipeline_id') AS INTEGER) = ?`,
+        `SELECT payload
+         FROM integration_records
+         WHERE source = 'amo' AND entity_type = 'events'
+           AND json_extract(payload, '$.type') = 'lead_status_changed'
+           AND CAST(json_extract(payload, '$.created_at') AS INTEGER) BETWEEN ? AND ?
+           AND CAST(json_extract(payload, '$.value_after[0].lead_status.id') AS INTEGER) = ?
+           AND CAST(json_extract(payload, '$.value_after[0].lead_status.pipeline_id') AS INTEGER) = ?`,
       ).bind(periodStart, periodEnd, KEV_STATUS_ID, PIPELINE_ID).all(),
     ]);
 
@@ -559,31 +479,11 @@ async function getStoredAmoDashboardData(
     manager.stageCounts[String(row.status_id)] = Number(row.count);
   }
 
-  const kevEvents: Array<{ event: AmoEvent; lead?: AmoLead }> = [];
-  for (const row of kevResult.results as Array<{ event_payload: string; lead_payload: string | null }>) {
-    kevEvents.push({
-      event: JSON.parse(row.event_payload) as AmoEvent,
-      lead: row.lead_payload ? JSON.parse(row.lead_payload) as AmoLead : undefined,
-    });
-  }
-  const uniqueEvents = uniqueKevEvents(kevEvents.map((item) => item.event));
-  const leadById = new Map(
-    kevEvents.filter((item) => item.lead).map((item) => [item.event.entity_id, item.lead!]),
-  );
-  const kevLeads = [...uniqueEvents.entries()].map(([leadId, event]) => {
-    const lead = leadById.get(leadId);
-    const manager = ensureManager(managerMap, users, lead?.responsible_user_id ?? event.created_by);
-    manager.kevCount += 1;
-    return {
-      id: leadId,
-      name: lead?.name ?? `Сделка #${leadId}`,
-      manager: manager.name,
-      enteredAt: formatEventDate(event.created_at),
-      currentStage: lead
-        ? statusMap.get(lead.status_id)?.name ?? `Этап ${lead.status_id}`
-        : "Сделка недоступна",
-    };
-  });
+  const kevCount = uniqueKevEvents(
+    (kevResult.results as Array<{ payload: string }>).map(
+      (row) => JSON.parse(row.payload) as AmoEvent,
+    ),
+  ).size;
 
   const leadsForTrend = (createdResult.results as Array<{ created_at: number }>).map(
     (row, index) => ({
@@ -594,8 +494,6 @@ async function getStoredAmoDashboardData(
       created_at: Number(row.created_at),
     }),
   );
-  const unsortedForTrend = unsortedResult.results as Array<{ created_at: number }>;
-
   return {
     connected: true,
     sourceStatus: "stored",
@@ -605,9 +503,8 @@ async function getStoredAmoDashboardData(
     unsorted: unsortedResult.results.length,
     stages,
     managers: [...managerMap.values()].sort((a, b) => b.total - a.total),
-    trend: buildTrend(leadsForTrend, range, unsortedForTrend),
-    kevCount: kevLeads.length,
-    kevLeads,
+    trend: buildTrend(leadsForTrend, range),
+    kevCount,
     updatedAt: run?.completed_at ? formatUpdatedAt(run.completed_at) : "нет данных",
   };
 }

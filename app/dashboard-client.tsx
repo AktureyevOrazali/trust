@@ -240,7 +240,7 @@ export function DashboardClient({
   const missed = findStage(stages, "недоз");
   const contact = findStage(stages, "контакт");
   const booked = findStage(stages, "записан");
-  const trial = selectedManager ? selectedManager.kevCount : data.kevCount;
+  const trial = findStage(data.stages, "кэв");
   const activeDeals = selectedManager
     ? selectedManager.total
     : data.activeDeals + data.unsorted;
@@ -281,9 +281,11 @@ export function DashboardClient({
   const unspecifiedCash = unspecifiedSales.reduce((sum, sale) => sum + sale.amount, 0);
   const totalRevenue = cash + repeatCash + bookingCash + unspecifiedCash;
   const averageCheck = firstSales ? Math.round(cash / firstSales) : 0;
+  const averagePayment = data.alfa.sales.length
+    ? Math.round(totalRevenue / data.alfa.sales.length)
+    : 0;
   const revenuePerLead = newLeads ? Math.round(totalRevenue / newLeads) : 0;
   const repeatShare = percent(repeatCash, totalRevenue);
-  const overallKevRate = percent(data.kevCount, newLeads);
   const maxDailyLeads = Math.max(...dailyRows.map((day) => day.newLeads), 1);
   const maxDailyCash = Math.max(
     ...dailyRows.map((day) => day.cash + day.repeatCash + day.bookingCash),
@@ -394,17 +396,12 @@ export function DashboardClient({
         </div>
       </header>
 
-      <section className="overview-bar" id="overview">
-        <div>
-          <p className="section-kicker">Образовательный центр китайского языка</p>
-          <h1>Результат продаж</h1>
-          <p className="overview-copy">
-            {periodLabel} · ключевые показатели для руководителя
-          </p>
+      <section className="dashboard-toolbar" aria-label="Фильтр даты">
+        <div className="toolbar-period">
+          <span>Период отчёта</span>
+          <strong>{periodLabel}</strong>
         </div>
-
-        <div className="overview-controls">
-          <span className="control-label">Фильтр периода</span>
+        <div className="toolbar-controls">
           <div className="period-switcher" role="group" aria-label="Быстрый выбор периода">
             <button
               type="button"
@@ -446,23 +443,26 @@ export function DashboardClient({
         </div>
       </section>
 
+      <section className="overview-bar" id="overview">
+        <div>
+          <p className="section-kicker">Образовательный центр китайского языка</p>
+          <h1>Результат продаж</h1>
+          <p className="overview-copy">Ключевые показатели для руководителя</p>
+        </div>
+      </section>
+
       <section className="executive-kpis" aria-label="Ключевые показатели">
         <KpiCard
           label="Новые лиды"
           value={nf.format(newLeads)}
-          note={data.unsorted ? `${newLeads - data.unsorted} сделок + ${data.unsorted} неразобранное` : periodLabel}
+          note={data.unsorted ? `${newLeads} сделок · ${data.unsorted} неразобранных отдельно` : periodLabel}
           tone="coral"
         />
         <KpiCard label="Новые продажи" value={nf.format(firstSales)} note="статья «Перв Китайский»" tone="jade" />
-        <KpiCard label="Касса" value={nf.format(cash) + " ₸"} note={nf.format(firstSales) + " оплат «Перв Китайский»"} tone="amber" />
+        <KpiCard label="Касса" value={nf.format(totalRevenue) + " ₸"} note={nf.format(data.alfa.sales.length) + " подтверждённых оплат"} tone="amber" />
         <KpiCard label="Новые продажи / лиды" value={leadToSale} note={firstSales + " оплат «Перв Китайский» ÷ " + newLeads + " лидов"} tone="light" />
         <KpiCard label="Средний чек" value={nf.format(averageCheck) + " ₸"} note="по статье «Перв Китайский»" tone="light" />
-        <KpiCard
-          label="Прошли через КЭВ"
-          value={nf.format(data.kevCount)}
-          note={`уникальные лиды по истории переходов · ${overallKevRate} от новых лидов`}
-          tone="light"
-        />
+        <KpiCard label="Оплаты" value={nf.format(data.alfa.sales.length)} note="операции AlphaCRM за период" tone="light" />
       </section>
 
       <section className="article-breakdown" aria-label="Продажи по статьям AlfaCRM">
@@ -517,7 +517,7 @@ export function DashboardClient({
           Касса считается только по статье «Перв Китайский». Статья «Повт Китайский» попадает только в повторную кассу, а «Бронь» и «Не указано» отображаются отдельно. Средний чек — касса, делённая на количество оплат «Перв Китайский».
         </p>
         <p>
-          «Новые продажи / лиды» — оперативное соотношение за один период, а не сквозная конверсия одного и того же клиента. «Прошли через КЭВ» считает уникальные сделки по истории смены этапов: лид остаётся в показателе, даже если уже перешёл дальше или был закрыт.
+          «Новые продажи / лиды» — оперативное соотношение за один период, а не сквозная конверсия одного и того же клиента. Графики ниже сопоставляют дату создания лида в amoCRM с датой подтверждённой оплаты в AlphaCRM.
         </p>
       </section>
 
@@ -563,9 +563,15 @@ export function DashboardClient({
           <p>
             Это {percent(missed, newLeads)} от новых лидов выбранного периода. Контакт сделан у {contact} лидов, а на пробный урок записаны {booked}.
           </p>
-          <div className="focus-stat">
-            <span>Прошли через КЭВ за период</span>
-            <strong>{trial}</strong>
+          <div className="focus-stats">
+            <div className="focus-stat">
+              <span>Прошли через КЭВ</span>
+              <strong>{data.kevCount}</strong>
+            </div>
+            <div className="focus-stat">
+              <span>Сейчас на КЭВ</span>
+              <strong>{trial}</strong>
+            </div>
           </div>
         </article>
       </section>
@@ -574,7 +580,7 @@ export function DashboardClient({
         <div className="section-heading">
           <div>
             <p className="section-kicker">Глубокая аналитика</p>
-            <h2>Экономика и ритм потока</h2>
+            <h2>Деньги и поток лидов</h2>
           </div>
           <p>{periodLabel}</p>
         </div>
@@ -585,14 +591,14 @@ export function DashboardClient({
             <small>вся касса AlphaCRM ÷ новые лиды amoCRM</small>
           </article>
           <article>
+            <span>Средний платёж</span>
+            <strong>{nf.format(averagePayment)} ₸</strong>
+            <small>касса ÷ все подтверждённые оплаты</small>
+          </article>
+          <article>
             <span>Доля повторной кассы</span>
             <strong>{repeatShare}</strong>
             <small>{nf.format(repeatCash)} ₸ из {nf.format(totalRevenue)} ₸</small>
-          </article>
-          <article>
-            <span>Интенсивность КЭВ</span>
-            <strong>{overallKevRate}</strong>
-            <small>{data.kevCount} переходов КЭВ к {newLeads} новым лидам</small>
           </article>
           <article>
             <span>Самый денежный день</span>
@@ -617,7 +623,22 @@ export function DashboardClient({
             })}
           </div>
         </div>
-        <p className="panel-note">Показатель КЭВ — поток переходов за период, а не когортная конверсия: часть лидов могла быть создана раньше. Выручка на лид — управленческий индикатор общей эффективности периода.</p>
+        <div className="cash-mix-chart" role="img" aria-label="Структура кассы по статьям оплаты">
+          <div className="cash-mix-heading"><strong>Структура кассы</strong><span>{nf.format(totalRevenue)} ₸</span></div>
+          {[
+            { label: "Перв Китайский", amount: cash, tone: "new" },
+            { label: "Повт Китайский", amount: repeatCash, tone: "repeat" },
+            { label: "Бронь", amount: bookingCash, tone: "booking" },
+            { label: "Не указано", amount: unspecifiedCash, tone: "other" },
+          ].map((item) => (
+            <div className="cash-mix-row" key={item.label}>
+              <span>{item.label}</span>
+              <div><i className={`cash-mix-bar ${item.tone}`} style={{ "--cash-width": percent(item.amount, totalRevenue) } as CSSProperties} /></div>
+              <strong>{nf.format(item.amount)} ₸</strong>
+            </div>
+          ))}
+        </div>
+        <p className="panel-note">Выручка на лид — управленческий показатель периода: он сравнивает все подтверждённые оплаты с лидами, созданными в эти же даты, и не является когортной конверсией.</p>
       </section>
 
       <section className="section-panel">
@@ -664,7 +685,7 @@ export function DashboardClient({
         <div className="table-scroll">
           <table>
             <thead>
-              <tr><th>Менеджер</th><th>В работе</th><th>Без контакта</th><th>Контакт</th><th>На пробный</th><th>КЭВ</th><th>Доля на пробном</th></tr>
+              <tr><th>Менеджер</th><th>В работе</th><th>Без контакта</th><th>Контакт</th><th>На пробный</th><th>КЭВ сейчас</th><th>Доля на пробном</th></tr>
             </thead>
             <tbody>
               {data.managers.map((manager) => {
@@ -676,7 +697,7 @@ export function DashboardClient({
                     <td>{manager.stageCounts["85172050"] ?? 0}</td>
                     <td>{manager.stageCounts["85171898"] ?? 0}</td>
                     <td>{managerBooked}</td>
-                    <td>{manager.kevCount}</td>
+                    <td>{manager.stageCounts["85172062"] ?? 0}</td>
                     <td><span className="conversion-chip">{percent(managerBooked, manager.total)}</span></td>
                   </tr>
                 );
@@ -684,37 +705,6 @@ export function DashboardClient({
             </tbody>
           </table>
         </div>
-      </section>
-
-      <section className="section-panel table-panel kev-panel">
-        <div className="section-heading">
-          <div>
-            <p className="section-kicker">История КЭВ</p>
-            <h2>Все лиды, прошедшие через КЭВ</h2>
-          </div>
-          <p>{data.kevLeads.length} уникальных лидов · {periodLabel}</p>
-        </div>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr><th>Вход в КЭВ</th><th>Лид</th><th>Ответственный</th><th>Текущий этап</th><th>№ сделки</th></tr>
-            </thead>
-            <tbody>
-              {data.kevLeads.length ? data.kevLeads.map((lead) => (
-                <tr key={lead.id}>
-                  <td className="date-cell">{lead.enteredAt}</td>
-                  <td><strong>{lead.name}</strong></td>
-                  <td>{lead.manager}</td>
-                  <td><span className="stage-chip">{lead.currentStage}</span></td>
-                  <td className="muted-cell">#{lead.id}</td>
-                </tr>
-              )) : (
-                <tr><td colSpan={5} className="empty-table">За выбранный период переходов в КЭВ не найдено</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <p className="data-note">Каждая сделка показана один раз по первому входу в КЭВ внутри выбранного периода. Текущий этап может быть любым — переход не теряется после дальнейшего движения по воронке.</p>
       </section>
 
       <section className="section-panel table-panel sales-panel">
