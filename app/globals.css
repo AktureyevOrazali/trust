@@ -89,7 +89,7 @@ select {
 .rnp-brand small {
   margin-top: 1px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.15em;
   text-transform: uppercase;
 }
@@ -109,7 +109,7 @@ select {
   border-radius: 999px;
   color: var(--muted);
   background: rgba(255, 253, 250, 0.7);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -141,7 +141,7 @@ select {
   color: var(--ink);
   background: var(--surface);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -175,7 +175,7 @@ select {
 .section-kicker {
   margin: 0 0 7px;
   color: var(--red);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -216,7 +216,7 @@ select {
 
 .toolbar-period span {
   color: var(--muted);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -238,7 +238,7 @@ select {
 .toolbar-controls > small {
   grid-column: 1 / -1;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .period-switcher {
@@ -258,7 +258,7 @@ select {
   color: var(--muted);
   background: transparent;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -288,7 +288,7 @@ select {
 .date-range-form label span {
   margin: 0;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -301,7 +301,7 @@ select {
   color: var(--ink);
   background: var(--surface);
   font: inherit;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -355,7 +355,7 @@ select {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  font-size: 8px;
+  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -367,7 +367,7 @@ select {
 .cash-kpi > small {
   margin-top: 5px;
   color: #7c6725;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .kpi-card {
@@ -385,7 +385,7 @@ select {
 .kpi-card p,
 .kpi-card span {
   margin: 0;
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.35;
 }
 
@@ -464,7 +464,7 @@ select {
 .article-card span,
 .article-card small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -532,13 +532,13 @@ select {
   border-radius: 12px;
   color: var(--muted);
   background: rgba(255, 253, 250, 0.66);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .metric-explainer strong {
   color: var(--ink);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .metric-explainer p {
@@ -579,7 +579,7 @@ select {
   padding: 0 12px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -612,7 +612,7 @@ select {
 .plan-head {
   padding: 0 0 8px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -621,11 +621,11 @@ select {
 .plan-row {
   min-height: 48px;
   border-top: 1px solid var(--line);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .plan-row strong {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .plan-fact {
@@ -652,7 +652,7 @@ select {
 
 .plan-status {
   color: var(--jade);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -679,7 +679,7 @@ select {
 .plan-week-note {
   margin: 14px 0 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -700,7 +700,7 @@ select {
 .funnel-rate {
   color: var(--muted);
   text-align: right;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -709,7 +709,7 @@ select {
   padding-top: 12px;
   border-top: 1px solid var(--line);
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -725,7 +725,7 @@ select {
   display: block;
   margin-bottom: 6px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -738,7 +738,7 @@ select {
   border-radius: 8px;
   color: var(--ink);
   background: var(--surface);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -784,7 +784,7 @@ select {
 .source-label {
   padding: 5px 8px;
   border-radius: 999px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -809,7 +809,7 @@ select {
 .metric-head {
   padding: 0 0 7px 18px;
   color: #8c9693;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -849,7 +849,7 @@ select {
 }
 
 .metric-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -861,7 +861,7 @@ select {
 .metric-share {
   color: var(--muted);
   text-align: right;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .pulse-card {
@@ -888,7 +888,7 @@ select {
   align-items: center;
   justify-content: space-between;
   color: rgba(255, 255, 255, 0.66);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -898,7 +898,7 @@ select {
   border-radius: 999px;
   color: #ddbd6c;
   background: rgba(221, 189, 108, 0.1);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .pulse-number {
@@ -916,7 +916,7 @@ select {
   z-index: 1;
   margin: 4px 0 0;
   color: rgba(255, 255, 255, 0.56);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .pulse-divider {
@@ -942,7 +942,7 @@ select {
 
 .pulse-secondary small {
   color: rgba(255, 255, 255, 0.55);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .pulse-secondary strong {
@@ -965,7 +965,7 @@ select {
 .section-heading > p {
   margin: 0;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .analytics-panel {
@@ -995,7 +995,7 @@ select {
 
 .analytics-kpis span {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1011,7 +1011,7 @@ select {
 .analytics-kpis small {
   margin-top: 5px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
@@ -1027,7 +1027,7 @@ select {
   justify-content: flex-end;
   gap: 16px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -1097,7 +1097,7 @@ select {
   display: block;
   margin-top: 6px;
   color: var(--muted);
-  font-size: 7px;
+  font-size: 11px;
   transform: rotate(-45deg);
   transform-origin: center;
   white-space: nowrap;
@@ -1124,12 +1124,12 @@ select {
 }
 
 .cash-mix-heading strong {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .cash-mix-heading span {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -1140,7 +1140,7 @@ select {
   gap: 10px;
   min-height: 29px;
   border-top: 1px solid rgba(222, 223, 215, 0.8);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .cash-mix-row > span {
@@ -1170,7 +1170,7 @@ select {
 
 .cash-mix-row strong {
   color: var(--jade-dark);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .daily-scroll {
@@ -1225,7 +1225,7 @@ select {
 }
 
 .day-title span {
-  font-size: 7px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -1251,13 +1251,13 @@ select {
 
 .day-card dt {
   color: var(--muted);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .day-card dd {
   margin: 0;
   text-align: right;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -1283,11 +1283,11 @@ select {
 .funnel-index {
   color: #a0a8a4;
   font-family: Georgia, serif;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .funnel-name {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1309,7 +1309,7 @@ select {
 
 .funnel-item > strong {
   text-align: right;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .focus-panel {
@@ -1334,7 +1334,7 @@ select {
 
 .focus-heading > span {
   color: rgba(255, 255, 255, 0.48);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1347,7 +1347,7 @@ select {
 .focus-main > span,
 .focus-main > p {
   color: rgba(255, 255, 255, 0.6);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -1374,7 +1374,7 @@ select {
   justify-content: space-between;
   gap: 12px;
   color: rgba(255, 255, 255, 0.7);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .focus-progress > div strong {
@@ -1421,7 +1421,7 @@ select {
 
 .focus-stat span {
   color: rgba(255, 255, 255, 0.55);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .focus-stat strong {
@@ -1448,7 +1448,7 @@ table {
   width: 100%;
   border-collapse: collapse;
   background: var(--surface);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 th,
@@ -1462,7 +1462,7 @@ td {
 th {
   color: var(--muted);
   background: var(--surface-soft);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1481,7 +1481,7 @@ td:first-child {
   border-radius: 8px;
   color: white;
   background: var(--jade);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .conversion-chip,
@@ -1492,7 +1492,7 @@ td:first-child {
   min-height: 23px;
   padding: 0 8px;
   border-radius: 999px;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -1533,7 +1533,7 @@ td:first-child {
 
 .amount-cell {
   color: var(--jade-dark);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -1547,7 +1547,7 @@ td:first-child {
   border-top: 1px solid var(--line);
   color: var(--muted);
   background: var(--surface-soft);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.5;
 }
 
@@ -1557,7 +1557,7 @@ td:first-child {
   gap: 20px;
   padding: 25px 3px 0;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1738,7 +1738,7 @@ td:first-child {
 @media (max-width: 480px) {
   .sync-pill {
     padding: 7px 8px;
-    font-size: 9px;
+    font-size: 11px;
   }
 
   .overview-bar h1 {
