@@ -230,7 +230,7 @@ select {
 
 .toolbar-controls {
   display: grid;
-  grid-template-columns: minmax(270px, 1fr) auto;
+  grid-template-columns: 1fr;
   align-items: center;
   gap: 6px 10px;
 }
@@ -371,7 +371,7 @@ select {
 }
 
 .kpi-card {
-  min-height: 132px;
+  min-height: 112px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -1669,7 +1669,7 @@ td:first-child {
   }
 
   .kpi-card {
-    min-height: 126px;
+    min-height: 112px;
     padding: 15px;
   }
 

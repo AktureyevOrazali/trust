@@ -79,19 +79,16 @@ function articleGroup(category: string) {
 function KpiCard({
   label,
   value,
-  note,
   tone = "light",
 }: {
   label: string;
   value: string | number;
-  note: string;
   tone?: "light" | "jade" | "amber" | "coral";
 }) {
   return (
     <article className={`kpi-card kpi-${tone}`}>
       <p>{label}</p>
       <strong>{value}</strong>
-      <span>{note}</span>
     </article>
   );
 }
@@ -317,7 +314,6 @@ export function DashboardClient({
           <span className="rnp-mark">中</span>
           <span>
             <strong>РНП</strong>
-            <small>рука на пульсе</small>
           </span>
         </a>
 
@@ -349,13 +345,10 @@ export function DashboardClient({
 
       <section className="overview-bar" id="overview">
         <div>
-          <p className="section-kicker">Образовательный центр китайского языка</p>
           <h1>Результат продаж</h1>
-          <p className="overview-copy">Ключевые показатели для руководителя</p>
         </div>
         <div className="dashboard-toolbar" aria-label="Фильтр даты">
           <div className="toolbar-period">
-            <span>Период отчёта</span>
             <strong>{periodLabel}</strong>
           </div>
           <div className="toolbar-controls">
@@ -371,7 +364,7 @@ export function DashboardClient({
                 <button type="submit" disabled={isRefreshing}>Применить</button>
               </form>
             )}
-            {filterError ? <small className="filter-error">{filterError}</small> : <small>Единый период для всех показателей</small>}
+            {filterError && <small className="filter-error">{filterError}</small>}
           </div>
         </div>
       </section>
@@ -380,29 +373,20 @@ export function DashboardClient({
         <KpiCard
           label="Новые лиды"
           value={nf.format(newLeads)}
-          note={data.unsorted ? `${newLeads} сделок · ${data.unsorted} неразобранных отдельно` : periodLabel}
           tone="coral"
         />
-        <KpiCard label="Новые продажи" value={nf.format(firstSales)} note="статья «Перв Китайский»" tone="jade" />
+        <KpiCard label="Новые продажи" value={nf.format(firstSales)} tone="jade" />
         <article className="kpi-card kpi-amber cash-kpi">
           <p>Касса</p>
           <strong>{nf.format(totalRevenue)} ₸</strong>
-          <div className="cash-kpi-breakdown">
-            <span>Первичная <b>{nf.format(cash)} ₸</b></span>
-            <span>Повторная <b>{nf.format(repeatCash)} ₸</b></span>
-            <span>Бронь <b>{nf.format(bookingCash)} ₸</b></span>
-            {unspecifiedCash > 0 && <span>Не указано <b>{nf.format(unspecifiedCash)} ₸</b></span>}
-          </div>
-          <small>{nf.format(data.alfa.sales.length)} подтверждённые оплаты</small>
         </article>
-        <KpiCard label="Новые продажи / лиды" value={leadToSale} note={firstSales + " оплат «Перв Китайский» ÷ " + newLeads + " лидов"} tone="light" />
-        <KpiCard label="Средний чек" value={nf.format(averageCheck) + " ₸"} note="по статье «Перв Китайский»" tone="light" />
+        <KpiCard label="Новые продажи / лиды" value={leadToSale} tone="light" />
+        <KpiCard label="Средний чек" value={nf.format(averageCheck) + " ₸"} tone="light" />
       </section>
 
       <section className="plan-panel" aria-label="План месяца">
         <div className="plan-heading">
           <div>
-            <p className="section-kicker">План месяца</p>
             <h2>{monthTitle.charAt(0).toUpperCase() + monthTitle.slice(1)}</h2>
           </div>
           {appliedRange.period === "month" && (
@@ -434,16 +418,13 @@ export function DashboardClient({
             </div>
             {planError && <p className="plan-error">{planError}</p>}
           </>
-        ) : (
-          <p className="plan-week-note">План задаётся на месяц. Выберите «Этот месяц», чтобы сравнить его с фактом и изменить цели.</p>
-        )}
+        ) : null}
       </section>
 
       <section className="executive-grid">
         <article className="section-panel funnel-panel">
           <div className="section-heading">
             <div>
-              <p className="section-kicker">Воронка продаж</p>
               <h2>Где теряются лиды</h2>
             </div>
             <p>{activeDeals} сделок в работе{!selectedManager && data.unsorted ? ` · ${data.unsorted} неразобранное` : ""}</p>
@@ -471,13 +452,11 @@ export function DashboardClient({
               );
             })}
           </div>
-          <p className="panel-note">Процент — доля всех лидов выбранного периода, которые сейчас находятся на этом этапе. Это не конверсия перехода между этапами.</p>
         </article>
 
         <article className="section-panel focus-panel">
           <div className="focus-heading">
-            <p className="section-kicker">Приоритет команды</p>
-            <span>воронка продаж</span>
+            <h2>Приоритет команды</h2>
           </div>
           <div className="focus-main">
             <span>Без качественного контакта</span>
@@ -504,7 +483,6 @@ export function DashboardClient({
       <section className="section-panel daily-chart-panel" aria-label="Динамика по дням">
         <div className="section-heading">
           <div>
-            <p className="section-kicker">Динамика</p>
             <h2>Лиды и касса по дням</h2>
           </div>
           <p>{periodLabel}</p>
@@ -531,7 +509,6 @@ export function DashboardClient({
       <section className="section-panel table-panel">
         <div className="section-heading team-heading">
           <div>
-            <p className="section-kicker">Команда</p>
             <h2>Менеджеры и этапы</h2>
           </div>
           <div className="manager-filter">
@@ -570,7 +547,6 @@ export function DashboardClient({
       <section className="section-panel table-panel sales-panel">
         <div className="section-heading">
           <div>
-            <p className="section-kicker">Детализация</p>
             <h2>Реестр оплат</h2>
           </div>
           <p>{data.alfa.sales.length} операций · {periodLabel}</p>
@@ -595,13 +571,7 @@ export function DashboardClient({
             </tbody>
           </table>
         </div>
-        <p className="data-note">Тип продажи определяется статьёй оплаты: «Перв Китайский» — первая, «Повт Китайский» — повторная, «Бронь» — бронь. Если статья отсутствует или не распознана, показано «Не указано».</p>
       </section>
-
-      <footer className="rnp-footer">
-        <span>РНП · аналитика продаж</span>
-        <span>amoCRM {data.updatedAt} · AlfaCRM {data.alfa.updatedAt}</span>
-      </footer>
     </main>
   );
 }
