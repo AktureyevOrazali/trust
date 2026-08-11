@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { periodStartKey } from "./period";
+import { dashboardRange, periodStartKey } from "./period";
 
 export interface MonthlyPlan {
   month: string;
@@ -37,7 +37,7 @@ const INITIAL_PLAN: MonthlyPlanInput = {
 };
 
 function currentMonth(): string {
-  return periodStartKey("month").slice(0, 7);
+  return periodStartKey(dashboardRange("month")).slice(0, 7);
 }
 
 function fallbackPlan(month: string): MonthlyPlan {

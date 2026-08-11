@@ -1,9 +1,19 @@
 import { env } from "cloudflare:workers";
-import { periodDates, periodStartSeconds, type DashboardPeriod } from "./period";
+import {
+  periodDates,
+  periodEndSeconds,
+  periodStartSeconds,
+  type DashboardRange,
+} from "./period";
 
 const PIPELINE_ID = 10819798;
+const KEV_STATUS_ID = 85172062;
 const CLOSED_STATUS_IDS = new Set([142, 143]);
 const AMO_PAGE_LIMIT = 250;
+const AMO_EVENT_PAGE_LIMIT = 100;
+const CACHE_TTL_MS = 60_000;
+
+export type SourceStatus = "live" | "cached" | "stored" | "unavailable";
 
 export interface DashboardStage {
   id: number;
@@ -18,88 +28,75 @@ export interface ManagerSnapshot {
   name: string;
   total: number;
   stageCounts: Record<string, number>;
+  kevCount: number;
 }
 
 export interface TrendPoint {
+  date: string;
   label: string;
   value: number;
   isToday: boolean;
 }
 
+export interface KevLeadSnapshot {
+  id: number;
+  name: string;
+  manager: string;
+  enteredAt: string;
+  currentStage: string;
+}
+
 export interface AmoDashboardData {
   connected: boolean;
+  sourceStatus: SourceStatus;
+  statusMessage: string;
   activeDeals: number;
   activeAmount: number;
   unsorted: number;
   stages: DashboardStage[];
   managers: ManagerSnapshot[];
   trend: TrendPoint[];
+  kevCount: number;
+  kevLeads: KevLeadSnapshot[];
   updatedAt: string;
 }
 
-const FALLBACK_STAGES: DashboardStage[] = [
-  { id: 85423126, name: "Новый лид", count: 2, amount: 0, sort: 20 },
-  { id: 85172050, name: "Недозвон", count: 114, amount: 0, sort: 30 },
-  { id: 85171898, name: "Контакт сделан", count: 63, amount: 0, sort: 40 },
-  { id: 85342722, name: "Записан на ПУ", count: 98, amount: 0, sort: 50 },
-  { id: 85172062, name: "КЭВ", count: 1, amount: 0, sort: 60 },
-  {
-    id: 87147494,
-    name: "Принимает решение",
-    count: 20,
-    amount: 45000,
-    sort: 70,
-  },
-  { id: 85172070, name: "Предоплата", count: 25, amount: 37500, sort: 80 },
-  { id: 87147498, name: "Полная оплата", count: 12, amount: 0, sort: 90 },
-];
+type AmoRuntime = {
+  DB?: D1Database;
+  AMO_BASE_URL?: string;
+  AMO_ACCESS_TOKEN?: string;
+};
 
-const FALLBACK_TREND: TrendPoint[] = [
-  { label: "30.07", value: 2, isToday: false },
-  { label: "31.07", value: 1, isToday: false },
-  { label: "01.08", value: 14, isToday: false },
-  { label: "02.08", value: 0, isToday: false },
-  { label: "03.08", value: 18, isToday: false },
-  { label: "04.08", value: 17, isToday: false },
-  { label: "05.08", value: 2, isToday: true },
-];
+type AmoLead = {
+  id: number;
+  name?: string;
+  pipeline_id: number;
+  status_id: number;
+  responsible_user_id: number;
+  price?: number;
+  created_at: number;
+};
 
-function fallbackData(): AmoDashboardData {
-  return {
-    connected: false,
-    activeDeals: 335,
-    activeAmount: 82500,
-    unsorted: 1,
-    stages: FALLBACK_STAGES,
-    managers: [
-      {
-        id: 1,
-        name: "Даниял",
-        total: 170,
-        stageCounts: {
-          "85423126": 1,
-          "85172050": 54,
-          "85171898": 32,
-          "85342722": 52,
-          "85172062": 1,
-        },
-      },
-      {
-        id: 2,
-        name: "Бехұлтан",
-        total: 165,
-        stageCounts: {
-          "85423126": 1,
-          "85172050": 60,
-          "85171898": 31,
-          "85342722": 46,
-          "85172062": 0,
-        },
-      },
-    ],
-    trend: FALLBACK_TREND,
-    updatedAt: "сегодня, 12:18",
-  };
+type AmoUnsorted = {
+  created_at?: number;
+  pipeline_id?: number;
+};
+
+type AmoEvent = {
+  entity_id: number;
+  created_by: number;
+  created_at: number;
+  value_after?: Array<{
+    lead_status?: { id?: number; pipeline_id?: number };
+  }>;
+};
+
+type CachedAmo = { data: AmoDashboardData; expiresAt: number };
+const cache = new Map<string, CachedAmo>();
+const inFlight = new Map<string, Promise<AmoDashboardData>>();
+
+function rangeKey(range: DashboardRange): string {
+  return `${range.from}:${range.to}`;
 }
 
 function formatUpdatedAt(timestamp: number): string {
@@ -110,6 +107,17 @@ function formatUpdatedAt(timestamp: number): string {
     minute: "2-digit",
     timeZone: "Asia/Qyzylorda",
   }).format(new Date(timestamp));
+}
+
+function formatEventDate(timestamp: number): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Qyzylorda",
+  }).format(new Date(timestamp * 1000));
 }
 
 function dateKey(timestamp: number): string {
@@ -129,43 +137,65 @@ function dateLabel(date: Date): string {
   }).format(date);
 }
 
-type AmoRuntime = {
-  DB?: D1Database;
-  AMO_BASE_URL?: string;
-  AMO_ACCESS_TOKEN?: string;
-};
+function emptyAmoData(range: DashboardRange, message: string): AmoDashboardData {
+  const todayKey = dateKey(Math.floor(Date.now() / 1000));
+  return {
+    connected: false,
+    sourceStatus: "unavailable",
+    statusMessage: message,
+    activeDeals: 0,
+    activeAmount: 0,
+    unsorted: 0,
+    stages: [],
+    managers: [],
+    trend: periodDates(range).map((date) => {
+      const key = date.toISOString().slice(0, 10);
+      return { date: key, label: dateLabel(date), value: 0, isToday: key === todayKey };
+    }),
+    kevCount: 0,
+    kevLeads: [],
+    updatedAt: "нет данных",
+  };
+}
 
-type AmoLead = {
-  id: number;
-  pipeline_id: number;
-  status_id: number;
-  responsible_user_id: number;
-  price?: number;
-  created_at: number;
-};
-
-type AmoUnsorted = {
-  created_at?: number;
-};
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
 async function amoRequest<T>(
   baseUrl: string,
   token: string,
   path: string,
 ): Promise<T> {
-  const response = await fetch(`${baseUrl}${path}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
+  let lastMessage = "amoCRM не ответила";
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(`${baseUrl}${path}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (response.status === 204) return {} as T;
+      if (response.ok) return response.json() as Promise<T>;
 
-  if (!response.ok) {
-    throw new Error(`amoCRM returned HTTP ${response.status}`);
+      const body = await response.text();
+      lastMessage = `amoCRM HTTP ${response.status}: ${body.slice(0, 180)}`;
+      const retryable = response.status === 429 || response.status >= 500;
+      if (!retryable || attempt === 2) throw new Error(lastMessage);
+      const retryAfter = Number(response.headers.get("retry-after"));
+      await sleep(Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter * 1000
+        : 400 * 2 ** attempt);
+    } catch (error) {
+      lastMessage = error instanceof Error ? error.message : lastMessage;
+      if (attempt === 2) throw new Error(lastMessage);
+      await sleep(400 * 2 ** attempt);
+    }
   }
-
-  return response.json() as Promise<T>;
+  throw new Error(lastMessage);
 }
 
 async function amoCollection<T>(
@@ -173,19 +203,16 @@ async function amoCollection<T>(
   token: string,
   path: string,
   embeddedKey: string,
+  limit = AMO_PAGE_LIMIT,
 ): Promise<T[]> {
   const items: T[] = [];
 
-  for (let page = 1; page <= 50; page += 1) {
+  for (let page = 1; page <= 100; page += 1) {
     const separator = path.includes("?") ? "&" : "?";
     const body = await amoRequest<{
       _embedded?: Record<string, unknown>;
       _links?: { next?: { href?: string } };
-    }>(
-      baseUrl,
-      token,
-      `${path}${separator}limit=${AMO_PAGE_LIMIT}&page=${page}`,
-    );
+    }>(baseUrl, token, `${path}${separator}limit=${limit}&page=${page}`);
     const pageItems = body._embedded?.[embeddedKey];
     const list = Array.isArray(pageItems) ? (pageItems as T[]) : [];
     items.push(...list);
@@ -196,15 +223,60 @@ async function amoCollection<T>(
   return items;
 }
 
+function leadQueryPath(range: DashboardRange): string {
+  const params = new URLSearchParams();
+  params.set("filter[pipeline_id]", String(PIPELINE_ID));
+  params.set("filter[created_at][from]", String(periodStartSeconds(range)));
+  params.set("filter[created_at][to]", String(periodEndSeconds(range)));
+  return `/api/v4/leads?${params.toString()}`;
+}
+
+function kevEventQueryPath(range: DashboardRange): string {
+  const params = new URLSearchParams();
+  params.set("filter[entity]", "lead");
+  params.set("filter[type]", "lead_status_changed");
+  params.set("filter[created_at][from]", String(periodStartSeconds(range)));
+  params.set("filter[created_at][to]", String(periodEndSeconds(range)));
+  params.set(
+    "filter[value_after][leads_statuses][0][pipeline_id]",
+    String(PIPELINE_ID),
+  );
+  params.set(
+    "filter[value_after][leads_statuses][0][status_id]",
+    String(KEV_STATUS_ID),
+  );
+  return `/api/v4/events?${params.toString()}`;
+}
+
+async function leadsByIds(
+  baseUrl: string,
+  token: string,
+  ids: number[],
+): Promise<AmoLead[]> {
+  const leads: AmoLead[] = [];
+  for (let offset = 0; offset < ids.length; offset += 50) {
+    const params = new URLSearchParams();
+    for (const id of ids.slice(offset, offset + 50)) {
+      params.append("filter[id][]", String(id));
+    }
+    leads.push(
+      ...(await amoCollection<AmoLead>(
+        baseUrl,
+        token,
+        `/api/v4/leads?${params.toString()}`,
+        "leads",
+      )),
+    );
+  }
+  return leads;
+}
+
 function buildTrend(
   leads: AmoLead[],
-  period: DashboardPeriod,
+  range: DashboardRange,
   unsorted: AmoUnsorted[] = [],
 ): TrendPoint[] {
-  const now = new Date();
-  const dayStarts = periodDates(period);
   const countsByDate = new Map<string, number>();
-
   for (const lead of leads) {
     if (!lead.created_at) continue;
     const key = dateKey(lead.created_at);
@@ -216,15 +288,11 @@ function buildTrend(
     countsByDate.set(key, (countsByDate.get(key) ?? 0) + 1);
   }
 
-  const todayKey = dateKey(Math.floor(now.getTime() / 1000));
-  return dayStarts.map((date) => {
-    const key = new Intl.DateTimeFormat("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      timeZone: "Asia/Qyzylorda",
-    }).format(date);
+  const todayKey = dateKey(Math.floor(Date.now() / 1000));
+  return periodDates(range).map((date) => {
+    const key = date.toISOString().slice(0, 10);
     return {
+      date: key,
       label: dateLabel(date),
       value: countsByDate.get(key) ?? 0,
       isToday: key === todayKey,
@@ -232,19 +300,45 @@ function buildTrend(
   });
 }
 
+function uniqueKevEvents(events: AmoEvent[]): Map<number, AmoEvent> {
+  const byLead = new Map<number, AmoEvent>();
+  for (const event of events) {
+    const status = event.value_after?.[0]?.lead_status;
+    if (status?.id !== KEV_STATUS_ID || status.pipeline_id !== PIPELINE_ID) continue;
+    const current = byLead.get(event.entity_id);
+    if (!current || event.created_at < current.created_at) {
+      byLead.set(event.entity_id, event);
+    }
+  }
+  return byLead;
+}
+
+function ensureManager(
+  managerMap: Map<number, ManagerSnapshot>,
+  users: Map<number, string>,
+  userId: number,
+): ManagerSnapshot {
+  const current = managerMap.get(userId);
+  if (current) return current;
+  const manager = {
+    id: userId,
+    name: users.get(userId) ?? `Менеджер ${userId}`,
+    total: 0,
+    stageCounts: {},
+    kevCount: 0,
+  };
+  managerMap.set(userId, manager);
+  return manager;
+}
+
 async function getLiveAmoDashboardData(
   baseUrlValue: string,
   token: string,
-  period: DashboardPeriod,
+  range: DashboardRange,
 ): Promise<AmoDashboardData> {
   const baseUrl = baseUrlValue.trim().replace(/\/+$/, "");
-  const [allLeads, pipeline, users, unsorted] = await Promise.all([
-    amoCollection<AmoLead>(
-      baseUrl,
-      token,
-      "/api/v4/leads",
-      "leads",
-    ),
+  const [allLeads, pipeline, usersList, unsorted, kevEvents] = await Promise.all([
+    amoCollection<AmoLead>(baseUrl, token, leadQueryPath(range), "leads"),
     amoRequest<{
       _embedded?: {
         statuses?: Array<{ id: number; name: string; sort: number }>;
@@ -262,18 +356,34 @@ async function getLiveAmoDashboardData(
       `/api/v4/leads/unsorted?filter[pipeline_id]=${PIPELINE_ID}`,
       "unsorted",
     ),
+    amoCollection<AmoEvent>(
+      baseUrl,
+      token,
+      kevEventQueryPath(range),
+      "events",
+      AMO_EVENT_PAGE_LIMIT,
+    ),
   ]);
 
+  const start = periodStartSeconds(range);
+  const end = periodEndSeconds(range);
   const pipelineLeads = allLeads.filter(
-    (lead) => lead.pipeline_id === PIPELINE_ID && lead.created_at >= periodStartSeconds(period),
+    (lead) =>
+      lead.pipeline_id === PIPELINE_ID &&
+      lead.created_at >= start &&
+      lead.created_at <= end,
   );
   const activeLeads = pipelineLeads.filter(
     (lead) => !CLOSED_STATUS_IDS.has(lead.status_id),
   );
-  const currentUnsorted = unsorted.filter(
-    (item) => Number(item.created_at ?? 0) >= periodStartSeconds(period),
-  );
+  const currentUnsorted = unsorted.filter((item) => {
+    const createdAt = Number(item.created_at ?? 0);
+    return createdAt >= start && createdAt <= end;
+  });
   const statusDefinitions = pipeline._embedded?.statuses ?? [];
+  const statusNames = new Map(
+    statusDefinitions.map((status) => [status.id, status.name]),
+  );
 
   const stages = statusDefinitions
     .filter((status) => !CLOSED_STATUS_IDS.has(status.id))
@@ -289,25 +399,44 @@ async function getLiveAmoDashboardData(
     })
     .sort((a, b) => a.sort - b.sort);
 
-  const userNames = new Map(users.map((user) => [user.id, user.name]));
+  const users = new Map(usersList.map((user) => [user.id, user.name]));
   const managerMap = new Map<number, ManagerSnapshot>();
   for (const lead of activeLeads) {
-    const manager = managerMap.get(lead.responsible_user_id) ?? {
-      id: lead.responsible_user_id,
-      name:
-        userNames.get(lead.responsible_user_id) ??
-        `Менеджер ${lead.responsible_user_id}`,
-      total: 0,
-      stageCounts: {},
-    };
+    const manager = ensureManager(
+      managerMap,
+      users,
+      lead.responsible_user_id,
+    );
     manager.total += 1;
     manager.stageCounts[String(lead.status_id)] =
       (manager.stageCounts[String(lead.status_id)] ?? 0) + 1;
-    managerMap.set(lead.responsible_user_id, manager);
   }
+
+  const kevByLead = uniqueKevEvents(kevEvents);
+  const kevLeadDetails = await leadsByIds(baseUrl, token, [...kevByLead.keys()]);
+  const kevDetailsById = new Map(kevLeadDetails.map((lead) => [lead.id, lead]));
+  const kevLeads = [...kevByLead.entries()]
+    .map(([leadId, event]) => {
+      const lead = kevDetailsById.get(leadId);
+      const managerId = lead?.responsible_user_id ?? event.created_by;
+      const manager = ensureManager(managerMap, users, managerId);
+      manager.kevCount += 1;
+      return {
+        id: leadId,
+        name: lead?.name ?? `Сделка #${leadId}`,
+        manager: manager.name,
+        enteredAt: formatEventDate(event.created_at),
+        currentStage: lead
+          ? statusNames.get(lead.status_id) ?? `Этап ${lead.status_id}`
+          : "Сделка недоступна",
+      };
+    })
+    .sort((a, b) => b.enteredAt.localeCompare(a.enteredAt));
 
   return {
     connected: true,
+    sourceStatus: "live",
+    statusMessage: "Данные обновлены",
     activeDeals: activeLeads.length,
     activeAmount: activeLeads.reduce(
       (sum, lead) => sum + Number(lead.price ?? 0),
@@ -316,207 +445,229 @@ async function getLiveAmoDashboardData(
     unsorted: currentUnsorted.length,
     stages,
     managers: [...managerMap.values()].sort((a, b) => b.total - a.total),
-    // Match the amoCRM pipeline view: only deals that remain open are included.
-    trend: buildTrend(activeLeads, period, currentUnsorted),
+    // Новые лиды считаются по дате создания и не исчезают после закрытия сделки.
+    trend: buildTrend(pipelineLeads, range, currentUnsorted),
+    kevCount: kevLeads.length,
+    kevLeads,
     updatedAt: formatUpdatedAt(Date.now()),
   };
 }
 
-export async function getAmoDashboardData(
-  period: DashboardPeriod = "month",
-): Promise<AmoDashboardData> {
-  const runtime = env as unknown as AmoRuntime;
+async function getStoredAmoDashboardData(
+  db: D1Database,
+  range: DashboardRange,
+): Promise<AmoDashboardData | null> {
+  const periodStart = periodStartSeconds(range);
+  const periodEnd = periodEndSeconds(range);
+  const [stageResult, statusResult, managerResult, userResult, createdResult, run, unsortedResult, kevResult] =
+    await Promise.all([
+      db.prepare(
+        `SELECT CAST(json_extract(payload, '$.status_id') AS INTEGER) AS status_id,
+                COUNT(*) AS count,
+                COALESCE(SUM(CAST(json_extract(payload, '$.price') AS INTEGER)), 0) AS amount
+         FROM integration_records
+         WHERE source = 'amo' AND entity_type = 'leads'
+           AND CAST(json_extract(payload, '$.pipeline_id') AS INTEGER) = ?
+           AND CAST(json_extract(payload, '$.created_at') AS INTEGER) BETWEEN ? AND ?
+           AND CAST(json_extract(payload, '$.status_id') AS INTEGER) NOT IN (142, 143)
+         GROUP BY status_id`,
+      ).bind(PIPELINE_ID, periodStart, periodEnd).all(),
+      db.prepare(
+        `SELECT payload FROM integration_records
+         WHERE source = 'amo' AND entity_type = 'pipeline_statuses' AND scope = ?`,
+      ).bind(String(PIPELINE_ID)).all(),
+      db.prepare(
+        `SELECT CAST(json_extract(payload, '$.responsible_user_id') AS INTEGER) AS user_id,
+                CAST(json_extract(payload, '$.status_id') AS INTEGER) AS status_id,
+                COUNT(*) AS count
+         FROM integration_records
+         WHERE source = 'amo' AND entity_type = 'leads'
+           AND CAST(json_extract(payload, '$.pipeline_id') AS INTEGER) = ?
+           AND CAST(json_extract(payload, '$.created_at') AS INTEGER) BETWEEN ? AND ?
+           AND CAST(json_extract(payload, '$.status_id') AS INTEGER) NOT IN (142, 143)
+         GROUP BY user_id, status_id`,
+      ).bind(PIPELINE_ID, periodStart, periodEnd).all(),
+      db.prepare(
+        `SELECT payload FROM integration_records
+         WHERE source = 'amo' AND entity_type = 'users'`,
+      ).all(),
+      db.prepare(
+        `SELECT CAST(json_extract(payload, '$.created_at') AS INTEGER) AS created_at
+         FROM integration_records
+         WHERE source = 'amo' AND entity_type = 'leads'
+           AND CAST(json_extract(payload, '$.pipeline_id') AS INTEGER) = ?
+           AND CAST(json_extract(payload, '$.created_at') AS INTEGER) BETWEEN ? AND ?`,
+      ).bind(PIPELINE_ID, periodStart, periodEnd).all(),
+      db.prepare(
+        `SELECT completed_at FROM integration_sync_runs
+         WHERE source = 'amo' AND status IN ('completed', 'completed_with_errors')
+         ORDER BY started_at DESC LIMIT 1`,
+      ).first<{ completed_at: number | null }>(),
+      db.prepare(
+        `SELECT CAST(json_extract(payload, '$.created_at') AS INTEGER) AS created_at
+         FROM integration_records
+         WHERE source = 'amo' AND entity_type = 'unsorted'
+           AND CAST(json_extract(payload, '$.pipeline_id') AS INTEGER) = ?
+           AND CAST(json_extract(payload, '$.created_at') AS INTEGER) BETWEEN ? AND ?`,
+      ).bind(PIPELINE_ID, periodStart, periodEnd).all(),
+      db.prepare(
+        `SELECT e.payload AS event_payload, l.payload AS lead_payload
+         FROM integration_records e
+         LEFT JOIN integration_records l
+           ON l.source = 'amo' AND l.entity_type = 'leads'
+          AND l.external_id = CAST(json_extract(e.payload, '$.entity_id') AS TEXT)
+         WHERE e.source = 'amo' AND e.entity_type = 'events'
+           AND json_extract(e.payload, '$.type') = 'lead_status_changed'
+           AND CAST(json_extract(e.payload, '$.created_at') AS INTEGER) BETWEEN ? AND ?
+           AND CAST(json_extract(e.payload, '$.value_after[0].lead_status.id') AS INTEGER) = ?
+           AND CAST(json_extract(e.payload, '$.value_after[0].lead_status.pipeline_id') AS INTEGER) = ?`,
+      ).bind(periodStart, periodEnd, KEV_STATUS_ID, PIPELINE_ID).all(),
+    ]);
 
-  if (runtime.AMO_BASE_URL && runtime.AMO_ACCESS_TOKEN) {
-    try {
-      return await getLiveAmoDashboardData(
-        runtime.AMO_BASE_URL,
-        runtime.AMO_ACCESS_TOKEN,
-        period,
-      );
-    } catch (error) {
-      console.error(
-        "amoCRM dashboard request failed:",
-        error instanceof Error ? error.message : "Unknown error",
-      );
-      // If amoCRM is temporarily unavailable, keep the dashboard usable
-      // with the latest locally stored snapshot.
-    }
+  if (!run?.completed_at && statusResult.results.length === 0) return null;
+
+  const statusMap = new Map<number, { name: string; sort: number }>();
+  for (const row of statusResult.results as Array<{ payload: string }>) {
+    const status = JSON.parse(row.payload) as { id: number; name: string; sort: number };
+    statusMap.set(status.id, { name: status.name, sort: status.sort });
+  }
+  const stageCounts = new Map(
+    (stageResult.results as Array<{ status_id: number; count: number; amount: number }>).map(
+      (row) => [row.status_id, { count: Number(row.count), amount: Number(row.amount) }],
+    ),
+  );
+  const stages = [...statusMap.entries()]
+    .filter(([statusId]) => !CLOSED_STATUS_IDS.has(statusId))
+    .map(([id, definition]) => ({
+      id,
+      name: definition.name,
+      count: stageCounts.get(id)?.count ?? 0,
+      amount: stageCounts.get(id)?.amount ?? 0,
+      sort: definition.sort,
+    }))
+    .sort((a, b) => a.sort - b.sort);
+
+  const users = new Map<number, string>();
+  for (const row of userResult.results as Array<{ payload: string }>) {
+    const user = JSON.parse(row.payload) as { id: number; name: string };
+    users.set(user.id, user.name);
+  }
+  const managerMap = new Map<number, ManagerSnapshot>();
+  for (const row of managerResult.results as Array<{ user_id: number; status_id: number; count: number }>) {
+    const manager = ensureManager(managerMap, users, row.user_id);
+    manager.total += Number(row.count);
+    manager.stageCounts[String(row.status_id)] = Number(row.count);
   }
 
-  if (!runtime.DB) return fallbackData();
-
-  try {
-    const periodStart = periodStartSeconds(period);
-    const [stageResult, statusResult, managerResult, userResult, createdResult, run, unsortedResult] =
-      await Promise.all([
-        runtime.DB.prepare(
-          `SELECT
-             CAST(json_extract(payload, '$.status_id') AS INTEGER) AS status_id,
-             COUNT(*) AS count,
-             COALESCE(SUM(CAST(json_extract(payload, '$.price') AS INTEGER)), 0) AS amount
-           FROM integration_records
-           WHERE source = 'amo'
-             AND entity_type = 'leads'
-             AND CAST(json_extract(payload, '$.pipeline_id') AS INTEGER) = ?
-             AND CAST(json_extract(payload, '$.created_at') AS INTEGER) >= ?
-           GROUP BY status_id`,
-        )
-          .bind(PIPELINE_ID, periodStart)
-          .all(),
-        runtime.DB.prepare(
-          `SELECT payload
-           FROM integration_records
-           WHERE source = 'amo'
-             AND entity_type = 'pipeline_statuses'
-             AND scope = ?`,
-        )
-          .bind(String(PIPELINE_ID))
-          .all(),
-        runtime.DB.prepare(
-          `SELECT
-             CAST(json_extract(payload, '$.responsible_user_id') AS INTEGER) AS user_id,
-             CAST(json_extract(payload, '$.status_id') AS INTEGER) AS status_id,
-             COUNT(*) AS count
-           FROM integration_records
-           WHERE source = 'amo'
-             AND entity_type = 'leads'
-             AND CAST(json_extract(payload, '$.pipeline_id') AS INTEGER) = ?
-             AND CAST(json_extract(payload, '$.created_at') AS INTEGER) >= ?
-           GROUP BY user_id, status_id`,
-        )
-          .bind(PIPELINE_ID, periodStart)
-          .all(),
-        runtime.DB.prepare(
-          `SELECT payload
-           FROM integration_records
-           WHERE source = 'amo' AND entity_type = 'users'`,
-        ).all(),
-        runtime.DB.prepare(
-          `SELECT CAST(json_extract(payload, '$.created_at') AS INTEGER) AS created_at
-           FROM integration_records
-           WHERE source = 'amo'
-             AND entity_type = 'leads'
-             AND CAST(json_extract(payload, '$.pipeline_id') AS INTEGER) = ?
-             AND CAST(json_extract(payload, '$.created_at') AS INTEGER) >= ?
-             AND CAST(json_extract(payload, '$.status_id') AS INTEGER) NOT IN (142, 143)`,
-        )
-          .bind(PIPELINE_ID, periodStart)
-          .all(),
-        runtime.DB.prepare(
-          `SELECT completed_at
-           FROM integration_sync_runs
-           WHERE source = 'amo' AND status IN ('completed', 'completed_with_errors')
-           ORDER BY started_at DESC
-           LIMIT 1`,
-        ).first<{ completed_at: number | null }>(),
-        runtime.DB.prepare(
-          `SELECT CAST(json_extract(payload, '$.created_at') AS INTEGER) AS created_at
-           FROM integration_records
-           WHERE source = 'amo'
-             AND entity_type = 'unsorted'
-             AND CAST(json_extract(payload, '$.pipeline_id') AS INTEGER) = ?
-             AND CAST(json_extract(payload, '$.created_at') AS INTEGER) >= ?`,
-        )
-          .bind(PIPELINE_ID, periodStart)
-          .all(),
-      ]);
-
-    const statusMap = new Map<number, { name: string; sort: number }>();
-    for (const row of statusResult.results as Array<{ payload: string }>) {
-      const status = JSON.parse(row.payload) as {
-        id: number;
-        name: string;
-        sort: number;
-      };
-      statusMap.set(status.id, { name: status.name, sort: status.sort });
-    }
-
-    const stages = (
-      stageResult.results as Array<{
-        status_id: number;
-        count: number;
-        amount: number;
-      }>
-    )
-      .filter((row) => !CLOSED_STATUS_IDS.has(row.status_id))
-      .map((row) => ({
-        id: row.status_id,
-        name: statusMap.get(row.status_id)?.name ?? `Этап ${row.status_id}`,
-        count: Number(row.count),
-        amount: Number(row.amount),
-        sort: statusMap.get(row.status_id)?.sort ?? 999,
-      }))
-      .sort((a, b) => a.sort - b.sort);
-
-    const users = new Map<number, string>();
-    for (const row of userResult.results as Array<{ payload: string }>) {
-      const user = JSON.parse(row.payload) as { id: number; name: string };
-      users.set(user.id, user.name);
-    }
-
-    const managerMap = new Map<number, ManagerSnapshot>();
-    for (const row of managerResult.results as Array<{
-      user_id: number;
-      status_id: number;
-      count: number;
-    }>) {
-      if (CLOSED_STATUS_IDS.has(row.status_id)) continue;
-      const manager = managerMap.get(row.user_id) ?? {
-        id: row.user_id,
-        name: users.get(row.user_id) ?? `Менеджер ${row.user_id}`,
-        total: 0,
-        stageCounts: {},
-      };
-      manager.total += Number(row.count);
-      manager.stageCounts[String(row.status_id)] = Number(row.count);
-      managerMap.set(row.user_id, manager);
-    }
-
-    const now = new Date();
-    const dayStarts = periodDates(period);
-    const countsByDate = new Map<string, number>();
-    for (const row of createdResult.results as Array<{ created_at: number }>) {
-      if (!row.created_at) continue;
-      const key = dateKey(Number(row.created_at));
-      countsByDate.set(key, (countsByDate.get(key) ?? 0) + 1);
-    }
-    for (const row of unsortedResult.results as Array<{ created_at: number }>) {
-      if (!row.created_at) continue;
-      const key = dateKey(Number(row.created_at));
-      countsByDate.set(key, (countsByDate.get(key) ?? 0) + 1);
-    }
-    const todayKey = dateKey(Math.floor(now.getTime() / 1000));
-    const trend = dayStarts.map((date) => {
-      const key = new Intl.DateTimeFormat("en-CA", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        timeZone: "Asia/Qyzylorda",
-      }).format(date);
-      return {
-        label: dateLabel(date),
-        value: countsByDate.get(key) ?? 0,
-        isToday: key === todayKey,
-      };
+  const kevEvents: Array<{ event: AmoEvent; lead?: AmoLead }> = [];
+  for (const row of kevResult.results as Array<{ event_payload: string; lead_payload: string | null }>) {
+    kevEvents.push({
+      event: JSON.parse(row.event_payload) as AmoEvent,
+      lead: row.lead_payload ? JSON.parse(row.lead_payload) as AmoLead : undefined,
     });
-
-    const activeDeals = stages.reduce((sum, stage) => sum + stage.count, 0);
-    const activeAmount = stages.reduce((sum, stage) => sum + stage.amount, 0);
-
+  }
+  const uniqueEvents = uniqueKevEvents(kevEvents.map((item) => item.event));
+  const leadById = new Map(
+    kevEvents.filter((item) => item.lead).map((item) => [item.event.entity_id, item.lead!]),
+  );
+  const kevLeads = [...uniqueEvents.entries()].map(([leadId, event]) => {
+    const lead = leadById.get(leadId);
+    const manager = ensureManager(managerMap, users, lead?.responsible_user_id ?? event.created_by);
+    manager.kevCount += 1;
     return {
-      connected: true,
-      activeDeals,
-      activeAmount,
-      unsorted: unsortedResult.results.length,
-      stages,
-      managers: [...managerMap.values()].sort((a, b) => b.total - a.total),
-      trend,
-      updatedAt: run?.completed_at
-        ? formatUpdatedAt(run.completed_at)
-        : "нет данных",
+      id: leadId,
+      name: lead?.name ?? `Сделка #${leadId}`,
+      manager: manager.name,
+      enteredAt: formatEventDate(event.created_at),
+      currentStage: lead
+        ? statusMap.get(lead.status_id)?.name ?? `Этап ${lead.status_id}`
+        : "Сделка недоступна",
     };
-  } catch {
-    return fallbackData();
+  });
+
+  const leadsForTrend = (createdResult.results as Array<{ created_at: number }>).map(
+    (row, index) => ({
+      id: index,
+      pipeline_id: PIPELINE_ID,
+      status_id: 0,
+      responsible_user_id: 0,
+      created_at: Number(row.created_at),
+    }),
+  );
+  const unsortedForTrend = unsortedResult.results as Array<{ created_at: number }>;
+
+  return {
+    connected: true,
+    sourceStatus: "stored",
+    statusMessage: "Показана последняя сохранённая копия",
+    activeDeals: stages.reduce((sum, stage) => sum + stage.count, 0),
+    activeAmount: stages.reduce((sum, stage) => sum + stage.amount, 0),
+    unsorted: unsortedResult.results.length,
+    stages,
+    managers: [...managerMap.values()].sort((a, b) => b.total - a.total),
+    trend: buildTrend(leadsForTrend, range, unsortedForTrend),
+    kevCount: kevLeads.length,
+    kevLeads,
+    updatedAt: run?.completed_at ? formatUpdatedAt(run.completed_at) : "нет данных",
+  };
+}
+
+export async function getAmoDashboardData(
+  range: DashboardRange,
+  forceRefresh = false,
+): Promise<AmoDashboardData> {
+  const runtime = env as unknown as AmoRuntime;
+  const key = rangeKey(range);
+  const cached = cache.get(key);
+  if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
+  const pending = inFlight.get(key);
+  if (pending) return pending;
+
+  const request = (async () => {
+    if (runtime.AMO_BASE_URL && runtime.AMO_ACCESS_TOKEN) {
+      try {
+        const data = await getLiveAmoDashboardData(
+          runtime.AMO_BASE_URL,
+          runtime.AMO_ACCESS_TOKEN,
+          range,
+        );
+        cache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+        return data;
+      } catch (error) {
+        console.error(
+          "amoCRM dashboard request failed:",
+          error instanceof Error ? error.message : "Unknown error",
+        );
+        if (cached) {
+          return {
+            ...cached.data,
+            sourceStatus: "cached" as const,
+            statusMessage: "amoCRM временно недоступна — показаны последние данные",
+          };
+        }
+      }
+    }
+
+    if (runtime.DB) {
+      try {
+        const stored = await getStoredAmoDashboardData(runtime.DB, range);
+        if (stored) return stored;
+      } catch (error) {
+        console.error(
+          "amoCRM stored dashboard request failed:",
+          error instanceof Error ? error.message : "Unknown error",
+        );
+      }
+    }
+
+    return emptyAmoData(range, "Не удалось получить данные amoCRM");
+  })();
+  inFlight.set(key, request);
+  try {
+    return await request;
+  } finally {
+    inFlight.delete(key);
   }
 }

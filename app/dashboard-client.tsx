@@ -6,8 +6,13 @@ import {
   useMemo,
   useState,
   type CSSProperties,
+  type FormEvent,
 } from "react";
-import type { DashboardData } from "@/lib/dashboard";
+import type {
+  DashboardData,
+  DashboardPeriod,
+  DashboardRange,
+} from "@/lib/dashboard";
 import type { MonthlyPlan, MonthlyPlanInput } from "@/lib/dashboard/plan";
 
 const nf = new Intl.NumberFormat("ru-RU");
@@ -21,8 +26,6 @@ const STAGE_COLORS = [
   "#266051",
   "#173f39",
 ];
-
-type Period = "week" | "month";
 
 function initials(name: string) {
   return name
@@ -44,6 +47,18 @@ function findStage(stages: DashboardData["stages"], fragment: string): number {
 function percent(value: number, total: number) {
   if (!total) return "0%";
   return `${Math.round((value / total) * 100)}%`;
+}
+
+function rangeLabel(range: DashboardRange) {
+  const format = (value: string, withYear: boolean) =>
+    new Intl.DateTimeFormat("ru-RU", {
+      day: "2-digit",
+      month: "short",
+      ...(withYear ? { year: "numeric" } : {}),
+      timeZone: "UTC",
+    }).format(new Date(`${value}T12:00:00Z`));
+  const sameYear = range.from.slice(0, 4) === range.to.slice(0, 4);
+  return `${format(range.from, !sameYear)} — ${format(range.to, true)}`;
 }
 
 function saleTypeClass(saleType: string) {
@@ -151,7 +166,10 @@ export function DashboardClient({
   const [data, setData] = useState(initialData);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [managerId, setManagerId] = useState("all");
-  const [period, setPeriod] = useState<Period>("month");
+  const [appliedRange, setAppliedRange] = useState(initialData.range);
+  const [customFrom, setCustomFrom] = useState(initialData.range.from);
+  const [customTo, setCustomTo] = useState(initialData.range.to);
+  const [filterError, setFilterError] = useState("");
   const [isPlanEditing, setIsPlanEditing] = useState(false);
   const [isSavingPlan, setIsSavingPlan] = useState(false);
   const [planError, setPlanError] = useState("");
@@ -164,23 +182,40 @@ export function DashboardClient({
     repeatRevenue: initialData.plan.repeatRevenue,
   });
 
-  const refresh = useCallback(async (requestedPeriod: Period = period) => {
+  const refresh = useCallback(async (
+    requestedRange: Pick<DashboardRange, "period"> & Partial<DashboardRange>,
+    force = false,
+  ) => {
     setIsRefreshing(true);
+    setFilterError("");
     try {
-      const response = await fetch(`/api/dashboard?period=${requestedPeriod}&refresh=${Date.now()}`, {
+      const search = new URLSearchParams({ period: requestedRange.period });
+      if (requestedRange.from) search.set("from", requestedRange.from);
+      if (requestedRange.to) search.set("to", requestedRange.to);
+      if (force) search.set("force", "1");
+      const response = await fetch(`/api/dashboard?${search.toString()}`, {
         cache: "no-store",
       });
-      if (response.ok) setData((await response.json()) as DashboardData);
+      const result = (await response.json()) as DashboardData & { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Не удалось применить период");
+      setData(result);
+      setAppliedRange(result.range);
+      setCustomFrom(result.range.from);
+      setCustomTo(result.range.to);
+    } catch (error) {
+      setFilterError(error instanceof Error ? error.message : "Не удалось обновить данные");
     } finally {
       setIsRefreshing(false);
     }
-  }, [period]);
+  }, []);
 
   useEffect(() => {
-    void refresh();
-    const interval = window.setInterval(refresh, 30_000);
+    const interval = window.setInterval(
+      () => void refresh(appliedRange),
+      120_000,
+    );
     return () => window.clearInterval(interval);
-  }, [refresh]);
+  }, [appliedRange, refresh]);
 
   const selectedManager = data.managers.find(
     (manager) => String(manager.id) === managerId,
@@ -205,7 +240,7 @@ export function DashboardClient({
   const missed = findStage(stages, "недоз");
   const contact = findStage(stages, "контакт");
   const booked = findStage(stages, "записан");
-  const trial = findStage(stages, "кэв");
+  const trial = selectedManager ? selectedManager.kevCount : data.kevCount;
   const activeDeals = selectedManager
     ? selectedManager.total
     : data.activeDeals + data.unsorted;
@@ -216,8 +251,9 @@ export function DashboardClient({
   }).format(new Date());
 
   const dailyRows = data.trend.map((leadDay, index) => {
-    const alphaDay = data.alfa.daily.find((day) => day.date === leadDay.label);
+    const alphaDay = data.alfa.daily.find((day) => day.dateKey === leadDay.date);
     return {
+      dateKey: leadDay.date,
       date: leadDay.label,
       newLeads: leadDay.value,
       cash: alphaDay?.firstChineseCash ?? 0,
@@ -243,17 +279,48 @@ export function DashboardClient({
   const repeatCash = repeatChineseSales.reduce((sum, sale) => sum + sale.amount, 0);
   const bookingCash = bookingSales.reduce((sum, sale) => sum + sale.amount, 0);
   const unspecifiedCash = unspecifiedSales.reduce((sum, sale) => sum + sale.amount, 0);
+  const totalRevenue = cash + repeatCash + bookingCash + unspecifiedCash;
   const averageCheck = firstSales ? Math.round(cash / firstSales) : 0;
-  const finalStage = stages.at(-1);
-  const periodLabel = period === "week" ? "последние 7 дней" : "текущий месяц";
+  const revenuePerLead = newLeads ? Math.round(totalRevenue / newLeads) : 0;
+  const repeatShare = percent(repeatCash, totalRevenue);
+  const overallKevRate = percent(data.kevCount, newLeads);
+  const maxDailyLeads = Math.max(...dailyRows.map((day) => day.newLeads), 1);
+  const maxDailyCash = Math.max(
+    ...dailyRows.map((day) => day.cash + day.repeatCash + day.bookingCash),
+    1,
+  );
+  const bestCashDay = dailyRows.reduce(
+    (best, day) =>
+      day.cash + day.repeatCash + day.bookingCash >
+      best.cash + best.repeatCash + best.bookingCash
+        ? day
+        : best,
+    dailyRows[0] ?? {
+      dateKey: "",
+      date: "—",
+      newLeads: 0,
+      cash: 0,
+      repeatCash: 0,
+      bookingCash: 0,
+      payments: 0,
+      activations: 0,
+      firstSales: 0,
+      repeatSales: 0,
+      isToday: false,
+      isFuture: false,
+    },
+  );
+  const periodLabel = rangeLabel(appliedRange);
   const leadToSale = percent(firstSales, newLeads);
-  const leadToFinal = percent(finalStage?.count ?? 0, newLeads);
   const noContactPercent = newLeads ? Math.round((missed / newLeads) * 100) : 0;
   const contactPercent = newLeads ? Math.round((contact / newLeads) * 100) : 0;
-  const selectPeriod = (nextPeriod: Period) => {
-    if (nextPeriod === period) return;
-    setPeriod(nextPeriod);
-    void refresh(nextPeriod);
+  const selectPeriod = (nextPeriod: Exclude<DashboardPeriod, "custom">) => {
+    if (nextPeriod === appliedRange.period && !isRefreshing) return;
+    void refresh({ period: nextPeriod });
+  };
+  const applyCustomPeriod = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void refresh({ period: "custom", from: customFrom, to: customTo });
   };
   const updatePlanDraft = (field: PlanField, value: number) => {
     setPlanDraft((current) => ({ ...current, [field]: Number.isFinite(value) ? Math.max(0, value) : 0 }));
@@ -302,16 +369,22 @@ export function DashboardClient({
         </a>
 
         <div className="header-statuses">
-          <span className={`sync-pill ${data.connected ? "online" : ""}`}>
+          <span
+            className={`sync-pill ${data.connected ? "online" : ""} ${data.sourceStatus !== "live" ? "stale" : ""}`}
+            title={data.statusMessage}
+          >
             <i /> amoCRM
           </span>
-          <span className={`sync-pill ${data.alfa.connected ? "online" : ""}`}>
+          <span
+            className={`sync-pill ${data.alfa.connected ? "online" : ""} ${data.alfa.sourceStatus !== "live" ? "stale" : ""}`}
+            title={data.alfa.statusMessage}
+          >
             <i /> AlfaCRM
           </span>
           <button
             className={`refresh-control ${isRefreshing ? "spinning" : ""}`}
             type="button"
-            onClick={refresh}
+            onClick={() => void refresh(appliedRange, true)}
             disabled={isRefreshing}
             aria-label="Обновить данные"
           >
@@ -326,29 +399,50 @@ export function DashboardClient({
           <p className="section-kicker">Образовательный центр китайского языка</p>
           <h1>Результат продаж</h1>
           <p className="overview-copy">
-            {monthTitle.charAt(0).toUpperCase() + monthTitle.slice(1)} · ключевые показатели для руководителя
+            {periodLabel} · ключевые показатели для руководителя
           </p>
         </div>
 
         <div className="overview-controls">
           <span className="control-label">Фильтр периода</span>
-          <div className="period-switcher" role="group" aria-label="Фильтр периода">
+          <div className="period-switcher" role="group" aria-label="Быстрый выбор периода">
             <button
               type="button"
-              className={period === "week" ? "active" : ""}
+              className={appliedRange.period === "week" ? "active" : ""}
               onClick={() => selectPeriod("week")}
             >
               Последние 7 дней
             </button>
             <button
               type="button"
-              className={period === "month" ? "active" : ""}
+              className={appliedRange.period === "month" ? "active" : ""}
               onClick={() => selectPeriod("month")}
             >
               Этот месяц
             </button>
           </div>
-          <small>Влияет на карточки, воронку, динамику и реестр оплат.</small>
+          <form className="date-range-form" onSubmit={applyCustomPeriod}>
+            <label>
+              <span>С</span>
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(event) => setCustomFrom(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              <span>По</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(event) => setCustomTo(event.target.value)}
+                required
+              />
+            </label>
+            <button type="submit" disabled={isRefreshing}>Применить</button>
+          </form>
+          {filterError ? <small className="filter-error">{filterError}</small> : <small>Один период для amoCRM, AlphaCRM, КЭВ и всех графиков.</small>}
         </div>
       </section>
 
@@ -364,9 +458,9 @@ export function DashboardClient({
         <KpiCard label="Новые продажи / лиды" value={leadToSale} note={firstSales + " оплат «Перв Китайский» ÷ " + newLeads + " лидов"} tone="light" />
         <KpiCard label="Средний чек" value={nf.format(averageCheck) + " ₸"} note="по статье «Перв Китайский»" tone="light" />
         <KpiCard
-          label="Доведение до финала"
-          value={leadToFinal}
-          note={finalStage ? `${finalStage.name}: ${finalStage.count} из ${newLeads}` : "нет этапов"}
+          label="Прошли через КЭВ"
+          value={nf.format(data.kevCount)}
+          note={`уникальные лиды по истории переходов · ${overallKevRate} от новых лидов`}
           tone="light"
         />
       </section>
@@ -383,7 +477,7 @@ export function DashboardClient({
             <p className="section-kicker">План месяца</p>
             <h2>{monthTitle.charAt(0).toUpperCase() + monthTitle.slice(1)}</h2>
           </div>
-          {period === "month" && (
+          {appliedRange.period === "month" && (
             <div className="plan-actions">
               {isPlanEditing ? (
                 <>
@@ -399,7 +493,7 @@ export function DashboardClient({
           )}
         </div>
 
-        {period === "month" ? (
+        {appliedRange.period === "month" ? (
           <>
             <div className="plan-head"><span>Показатель</span><span>Факт</span><span>План</span><span>Выполнение</span><span /></div>
             <div className="plan-list">
@@ -423,7 +517,7 @@ export function DashboardClient({
           Касса считается только по статье «Перв Китайский». Статья «Повт Китайский» попадает только в повторную кассу, а «Бронь» и «Не указано» отображаются отдельно. Средний чек — касса, делённая на количество оплат «Перв Китайский».
         </p>
         <p>
-          «Новые продажи / лиды» — оперативное соотношение за один период, а не сквозная конверсия одного и того же клиента. «Доведение до финала» считает лиды этого периода, которые сейчас находятся на финальном этапе amoCRM.
+          «Новые продажи / лиды» — оперативное соотношение за один период, а не сквозная конверсия одного и того же клиента. «Прошли через КЭВ» считает уникальные сделки по истории смены этапов: лид остаётся в показателе, даже если уже перешёл дальше или был закрыт.
         </p>
       </section>
 
@@ -470,10 +564,60 @@ export function DashboardClient({
             Это {percent(missed, newLeads)} от новых лидов выбранного периода. Контакт сделан у {contact} лидов, а на пробный урок записаны {booked}.
           </p>
           <div className="focus-stat">
-            <span>Дошли до пробного урока</span>
+            <span>Прошли через КЭВ за период</span>
             <strong>{trial}</strong>
           </div>
         </article>
+      </section>
+
+      <section className="section-panel analytics-panel" aria-label="Глубокая аналитика">
+        <div className="section-heading">
+          <div>
+            <p className="section-kicker">Глубокая аналитика</p>
+            <h2>Экономика и ритм потока</h2>
+          </div>
+          <p>{periodLabel}</p>
+        </div>
+        <div className="analytics-kpis">
+          <article>
+            <span>Выручка на новый лид</span>
+            <strong>{nf.format(revenuePerLead)} ₸</strong>
+            <small>вся касса AlphaCRM ÷ новые лиды amoCRM</small>
+          </article>
+          <article>
+            <span>Доля повторной кассы</span>
+            <strong>{repeatShare}</strong>
+            <small>{nf.format(repeatCash)} ₸ из {nf.format(totalRevenue)} ₸</small>
+          </article>
+          <article>
+            <span>Интенсивность КЭВ</span>
+            <strong>{overallKevRate}</strong>
+            <small>{data.kevCount} переходов КЭВ к {newLeads} новым лидам</small>
+          </article>
+          <article>
+            <span>Самый денежный день</span>
+            <strong>{bestCashDay.date}</strong>
+            <small>{nf.format(bestCashDay.cash + bestCashDay.repeatCash + bestCashDay.bookingCash)} ₸</small>
+          </article>
+        </div>
+        <div className="combo-chart" role="img" aria-label="Сравнение новых лидов и кассы по дням">
+          <div className="chart-legend"><span className="leads-legend">Новые лиды</span><span className="cash-legend">Касса</span></div>
+          <div className="chart-scroll">
+            {dailyRows.map((day) => {
+              const dailyCash = day.cash + day.repeatCash + day.bookingCash;
+              return (
+                <div className="chart-day" key={day.dateKey} title={`${day.date}: ${day.newLeads} лидов, ${nf.format(dailyCash)} ₸`}>
+                  <div className="chart-bars">
+                    <i className="leads-bar" style={{ "--height": `${Math.max(day.newLeads ? 8 : 0, (day.newLeads / maxDailyLeads) * 100)}%` } as CSSProperties} />
+                    <i className="cash-bar" style={{ "--height": `${Math.max(dailyCash ? 8 : 0, (dailyCash / maxDailyCash) * 100)}%` } as CSSProperties} />
+                  </div>
+                  <span>{day.date}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <p className="panel-note">Показатель КЭВ — поток переходов за период, а не когортная конверсия: часть лидов могла быть создана раньше. Выручка на лид — управленческий индикатор общей эффективности периода.</p>
       </section>
 
       <section className="section-panel">
@@ -487,7 +631,7 @@ export function DashboardClient({
 
         <div className="daily-scroll">
           {periodRows.map((day) => (
-            <article className={`day-card ${day.isToday ? "today" : ""} ${day.isFuture ? "future" : ""}`} key={day.date}>
+            <article className={`day-card ${day.isToday ? "today" : ""} ${day.isFuture ? "future" : ""}`} key={day.dateKey}>
               <div className="day-title">
                 <strong>{day.date}</strong>
                 {day.isToday && <span>сегодня</span>}
@@ -532,7 +676,7 @@ export function DashboardClient({
                     <td>{manager.stageCounts["85172050"] ?? 0}</td>
                     <td>{manager.stageCounts["85171898"] ?? 0}</td>
                     <td>{managerBooked}</td>
-                    <td>{manager.stageCounts["85172062"] ?? 0}</td>
+                    <td>{manager.kevCount}</td>
                     <td><span className="conversion-chip">{percent(managerBooked, manager.total)}</span></td>
                   </tr>
                 );
@@ -540,6 +684,37 @@ export function DashboardClient({
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="section-panel table-panel kev-panel">
+        <div className="section-heading">
+          <div>
+            <p className="section-kicker">История КЭВ</p>
+            <h2>Все лиды, прошедшие через КЭВ</h2>
+          </div>
+          <p>{data.kevLeads.length} уникальных лидов · {periodLabel}</p>
+        </div>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr><th>Вход в КЭВ</th><th>Лид</th><th>Ответственный</th><th>Текущий этап</th><th>№ сделки</th></tr>
+            </thead>
+            <tbody>
+              {data.kevLeads.length ? data.kevLeads.map((lead) => (
+                <tr key={lead.id}>
+                  <td className="date-cell">{lead.enteredAt}</td>
+                  <td><strong>{lead.name}</strong></td>
+                  <td>{lead.manager}</td>
+                  <td><span className="stage-chip">{lead.currentStage}</span></td>
+                  <td className="muted-cell">#{lead.id}</td>
+                </tr>
+              )) : (
+                <tr><td colSpan={5} className="empty-table">За выбранный период переходов в КЭВ не найдено</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="data-note">Каждая сделка показана один раз по первому входу в КЭВ внутри выбранного периода. Текущий этап может быть любым — переход не теряется после дальнейшего движения по воронке.</p>
       </section>
 
       <section className="section-panel table-panel sales-panel">
