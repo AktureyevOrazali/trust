@@ -8,6 +8,11 @@ import {
 
 const PIPELINE_ID = 10819798;
 const KEV_STATUS_ID = 85172062;
+const KEV_FOLLOW_UP_STATUS_NAMES = new Set([
+  "предоплата",
+  "полная оплата",
+  "успешка начал обучение",
+]);
 const CLOSED_STATUS_IDS = new Set([142, 143]);
 const AMO_PAGE_LIMIT = 250;
 const AMO_EVENT_PAGE_LIMIT = 100;
@@ -264,6 +269,39 @@ function uniqueKevEvents(events: AmoEvent[]): Map<number, AmoEvent> {
   return byLead;
 }
 
+function normalizedStatusName(name: string): string {
+  return name
+    .toLocaleLowerCase("ru-RU")
+    .replace(/[–—-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function kevFollowUpStatusIds(
+  statuses: Array<{ id: number; name: string }>,
+): Set<number> {
+  return new Set(
+    statuses
+      .filter((status) =>
+        KEV_FOLLOW_UP_STATUS_NAMES.has(normalizedStatusName(status.name)),
+      )
+      .map((status) => status.id),
+  );
+}
+
+function kevPassedLeadIds(
+  leads: AmoLead[],
+  kevEvents: Map<number, AmoEvent>,
+  statuses: Array<{ id: number; name: string }>,
+): Set<number> {
+  const ids = new Set(kevEvents.keys());
+  const followUpStatusIds = kevFollowUpStatusIds(statuses);
+  for (const lead of leads) {
+    if (followUpStatusIds.has(lead.status_id)) ids.add(lead.id);
+  }
+  return ids;
+}
+
 function kevCountsByDate(events: Iterable<AmoEvent>): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const event of events) {
@@ -277,10 +315,10 @@ function addKevPassedByManager(
   managerMap: Map<number, ManagerSnapshot>,
   users: Map<number, string>,
   leads: AmoLead[],
-  kevEvents: Map<number, AmoEvent>,
+  kevLeadIds: Set<number>,
 ) {
   for (const lead of leads) {
-    if (lead.status_id !== KEV_STATUS_ID && !kevEvents.has(lead.id)) continue;
+    if (!kevLeadIds.has(lead.id)) continue;
     ensureManager(managerMap, users, lead.responsible_user_id).kevPassed += 1;
   }
 }
@@ -380,8 +418,9 @@ async function getLiveAmoDashboardData(
   }
 
   const uniqueKev = uniqueKevEvents(kevEvents);
-  const kevCount = uniqueKev.size;
-  addKevPassedByManager(managerMap, users, activeLeads, uniqueKev);
+  const kevLeadIds = kevPassedLeadIds(pipelineLeads, uniqueKev, statusDefinitions);
+  const kevCount = kevLeadIds.size;
+  addKevPassedByManager(managerMap, users, activeLeads, kevLeadIds);
 
   return {
     connected: true,
@@ -514,15 +553,20 @@ async function getStoredAmoDashboardData(
     (row) => JSON.parse(row.payload) as AmoEvent,
   );
   const uniqueKev = uniqueKevEvents(storedKevEvents);
-  const kevCount = uniqueKev.size;
   const storedLeads = (createdResult.results as Array<{ payload: string }>).map(
     (row) => JSON.parse(row.payload) as AmoLead,
   );
+  const statusDefinitions = [...statusMap.entries()].map(([id, status]) => ({
+    id,
+    name: status.name,
+  }));
+  const kevLeadIds = kevPassedLeadIds(storedLeads, uniqueKev, statusDefinitions);
+  const kevCount = kevLeadIds.size;
   addKevPassedByManager(
     managerMap,
     users,
     storedLeads.filter((lead) => !CLOSED_STATUS_IDS.has(lead.status_id)),
-    uniqueKev,
+    kevLeadIds,
   );
 
   const leadsForTrend = storedLeads;

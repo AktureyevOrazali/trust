@@ -21,14 +21,19 @@ test("uses one validated date range across the dashboard", async () => {
   assert.match(client, /aria-label="[^"]+"/);
 });
 
-test("counts stable amoCRM leads and historical KEV transitions", async () => {
+test("counts historical KEV transitions and the agreed follow-up stages", async () => {
   const amo = await source("lib/dashboard/amo.ts");
 
   assert.match(amo, /response\.status === 204/);
   assert.match(amo, /lead_status_changed/);
   assert.match(amo, /filter\[value_after\]\[leads_statuses\]/);
-  assert.match(amo, /trend: buildTrend\(pipelineLeads, range\)/);
-  assert.match(amo, /const kevCount = uniqueKevEvents\(kevEvents\)\.size/);
+  assert.match(amo, /trend: buildTrend\(/);
+  assert.match(amo, /const KEV_FOLLOW_UP_STATUS_NAMES = new Set/);
+  assert.match(amo, /"предоплата"/);
+  assert.match(amo, /"полная оплата"/);
+  assert.match(amo, /"успешка начал обучение"/);
+  assert.match(amo, /function kevPassedLeadIds/);
+  assert.match(amo, /const kevCount = kevLeadIds\.size/);
   assert.doesNotMatch(amo, /kevLeads/);
   assert.match(amo, /sourceStatus: "cached"/);
 });
@@ -45,8 +50,9 @@ test("limits AlphaCRM load and exposes a compact daily chart", async () => {
   assert.match(client, /data\.kevCount/);
   assert.match(client, /className="focus-stats"/);
   assert.doesNotMatch(client, /kevLeads/);
-  assert.match(client, /className="cash-kpi-breakdown"/);
+  assert.doesNotMatch(client, /className="cash-kpi-breakdown"/);
   assert.doesNotMatch(client, /Глубокая аналитика/);
-  assert.doesNotMatch(client, /className="daily-scroll"/);
-  assert.match(client, /className="combo-chart"/);
+  assert.match(client, /className="daily-scroll"/);
+  assert.match(client, /day-card/);
+  assert.doesNotMatch(client, /className="combo-chart"/);
 });
