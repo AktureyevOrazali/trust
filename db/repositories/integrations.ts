@@ -1,11 +1,11 @@
 import { desc, eq, inArray, sql } from "drizzle-orm";
 
-import { db } from "../index";
-import { integrationRecords, integrationSyncRuns } from "../schema";
+import { db } from "../index.ts";
+import { integrationRecords, integrationSyncRuns } from "../schema.ts";
 import type {
   IntegrationSource,
   RawIntegrationRecord,
-} from "../../lib/integrations/types";
+} from "../../lib/integrations/types.ts";
 
 export interface FinishSyncInput {
   status: "completed" | "completed_with_errors" | "failed";

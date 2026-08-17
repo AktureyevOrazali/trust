@@ -1,10 +1,10 @@
-import { RequestRateLimiter } from "./rate-limit";
+import { RequestRateLimiter } from "./rate-limit.ts";
 import {
   type DiscoveryResult,
   externalIdOf,
   safeErrorMessage,
   updatedAtOf,
-} from "./types";
+} from "./types.ts";
 
 export const ALFA_ENTITY_CATALOG = [
   "branch",

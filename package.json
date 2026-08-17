@@ -9,12 +9,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "npm run build && node --test tests/*.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "test": "npm run build && node --test tests/*.test.mjs && node --experimental-strip-types --test tests/*.test.ts",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .netlify",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@netlify/database": "^1.1.0",
+    "@netlify/functions": "^5.3.0",
     "drizzle-orm": "^1.0.0-rc.4",
     "next": "16.2.6",
     "pg": "^8.23.0",

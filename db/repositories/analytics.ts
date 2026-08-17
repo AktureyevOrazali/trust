@@ -1,7 +1,7 @@
 import { asc, eq, gte } from "drizzle-orm";
 
-import { db } from "../index";
-import { analyticsDailySnapshots, integrationRecords } from "../schema";
+import { db } from "../index.ts";
+import { analyticsDailySnapshots, integrationRecords } from "../schema.ts";
 
 export type DailySnapshot = typeof analyticsDailySnapshots.$inferSelect;
 export type DailySnapshotInput = typeof analyticsDailySnapshots.$inferInsert;
