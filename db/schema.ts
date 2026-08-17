@@ -1,16 +1,25 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  bigint,
+  bigserial,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 
-export const integrationRecords = sqliteTable(
+export const integrationRecords = pgTable(
   "integration_records",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: bigserial("id", { mode: "number" }).primaryKey(),
     source: text("source").notNull(),
     scope: text("scope").notNull(),
     entityType: text("entity_type").notNull(),
     externalId: text("external_id").notNull(),
-    payload: text("payload").notNull(),
+    payload: jsonb("payload").notNull(),
     sourceUpdatedAt: text("source_updated_at"),
-    fetchedAt: integer("fetched_at").notNull(),
+    fetchedAt: bigint("fetched_at", { mode: "number" }).notNull(),
     syncRunId: text("sync_run_id").notNull(),
   },
   (table) => [
@@ -28,18 +37,18 @@ export const integrationRecords = sqliteTable(
   ],
 );
 
-export const integrationSyncRuns = sqliteTable(
+export const integrationSyncRuns = pgTable(
   "integration_sync_runs",
   {
     id: text("id").primaryKey(),
     source: text("source").notNull(),
     status: text("status").notNull(),
-    startedAt: integer("started_at").notNull(),
-    completedAt: integer("completed_at"),
+    startedAt: bigint("started_at", { mode: "number" }).notNull(),
+    completedAt: bigint("completed_at", { mode: "number" }),
     recordsSeen: integer("records_seen").notNull().default(0),
     recordsSaved: integer("records_saved").notNull().default(0),
     errorCount: integer("error_count").notNull().default(0),
-    errors: text("errors"),
+    errors: jsonb("errors"),
   },
   (table) => [
     index("idx_integration_sync_runs_source_started").on(
@@ -49,7 +58,7 @@ export const integrationSyncRuns = sqliteTable(
   ],
 );
 
-export const monthlyPlans = sqliteTable("monthly_plans", {
+export const monthlyPlans = pgTable("monthly_plans", {
   month: text("month").primaryKey(),
   newLeads: integer("new_leads").notNull(),
   noContactPercent: integer("no_contact_percent").notNull(),
@@ -57,5 +66,28 @@ export const monthlyPlans = sqliteTable("monthly_plans", {
   revenue: integer("revenue").notNull(),
   newSales: integer("new_sales").notNull(),
   repeatRevenue: integer("repeat_revenue").notNull(),
-  updatedAt: integer("updated_at").notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 });
+
+export const analyticsDailySnapshots = pgTable(
+  "analytics_daily_snapshots",
+  {
+    snapshotDate: text("snapshot_date").notNull(),
+    branchId: text("branch_id").notNull(),
+    totalStudents: integer("total_students").notNull(),
+    activeStudents: integer("active_students").notNull(),
+    frozenStudents: integer("frozen_students").notNull(),
+    finishedStudents: integer("finished_students").notNull(),
+    bookingStudents: integer("booking_students").notNull(),
+    revenue: bigint("revenue", { mode: "number" }).notNull(),
+    paymentCount: integer("payment_count").notNull(),
+    activeGroupCount: integer("active_group_count").notNull(),
+    syncRunId: text("sync_run_id").notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_analytics_snapshot_date_branch").on(
+      table.snapshotDate,
+      table.branchId,
+    ),
+  ],
+);
