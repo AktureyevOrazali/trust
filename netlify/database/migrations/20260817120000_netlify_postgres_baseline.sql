@@ -1,4 +1,4 @@
-CREATE TABLE integration_records (
+CREATE TABLE IF NOT EXISTS integration_records (
   id bigserial PRIMARY KEY,
   source text NOT NULL,
   scope text NOT NULL,
@@ -10,14 +10,14 @@ CREATE TABLE integration_records (
   sync_run_id text NOT NULL
 );
 
-CREATE UNIQUE INDEX uq_integration_record_source_scope_entity_external
+CREATE UNIQUE INDEX IF NOT EXISTS uq_integration_record_source_scope_entity_external
   ON integration_records (source, scope, entity_type, external_id);
-CREATE INDEX idx_integration_records_source_entity
+CREATE INDEX IF NOT EXISTS idx_integration_records_source_entity
   ON integration_records (source, entity_type);
-CREATE INDEX idx_integration_records_fetched_at
+CREATE INDEX IF NOT EXISTS idx_integration_records_fetched_at
   ON integration_records (fetched_at);
 
-CREATE TABLE integration_sync_runs (
+CREATE TABLE IF NOT EXISTS integration_sync_runs (
   id text PRIMARY KEY,
   source text NOT NULL,
   status text NOT NULL,
@@ -29,10 +29,10 @@ CREATE TABLE integration_sync_runs (
   errors jsonb
 );
 
-CREATE INDEX idx_integration_sync_runs_source_started
+CREATE INDEX IF NOT EXISTS idx_integration_sync_runs_source_started
   ON integration_sync_runs (source, started_at);
 
-CREATE TABLE monthly_plans (
+CREATE TABLE IF NOT EXISTS monthly_plans (
   month text PRIMARY KEY,
   new_leads integer NOT NULL,
   no_contact_percent integer NOT NULL,
@@ -43,7 +43,7 @@ CREATE TABLE monthly_plans (
   updated_at bigint NOT NULL
 );
 
-CREATE TABLE analytics_daily_snapshots (
+CREATE TABLE IF NOT EXISTS analytics_daily_snapshots (
   snapshot_date text NOT NULL,
   branch_id text NOT NULL,
   total_students integer NOT NULL,
@@ -57,5 +57,5 @@ CREATE TABLE analytics_daily_snapshots (
   sync_run_id text NOT NULL
 );
 
-CREATE UNIQUE INDEX uq_analytics_snapshot_date_branch
+CREATE UNIQUE INDEX IF NOT EXISTS uq_analytics_snapshot_date_branch
   ON analytics_daily_snapshots (snapshot_date, branch_id);
