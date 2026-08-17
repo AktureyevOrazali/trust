@@ -39,7 +39,15 @@ export interface IntegrationRepository {
   listPayloads(
     source: IntegrationSource,
     entityTypes: string[],
-  ): Promise<Array<{ entityType: string; payload: unknown; fetchedAt: number }>>;
+  ): Promise<
+    Array<{
+      scope: string;
+      entityType: string;
+      externalId: string;
+      payload: unknown;
+      fetchedAt: number;
+    }>
+  >;
   summary(): Promise<{ counts: EntityCount[]; runs: SyncRunSummary[] }>;
 }
 
@@ -116,7 +124,9 @@ export const integrationRepository: IntegrationRepository = {
     if (entityTypes.length === 0) return [];
     return db
       .select({
+        scope: integrationRecords.scope,
         entityType: integrationRecords.entityType,
+        externalId: integrationRecords.externalId,
         payload: integrationRecords.payload,
         fetchedAt: integrationRecords.fetchedAt,
       })

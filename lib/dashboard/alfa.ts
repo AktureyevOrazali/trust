@@ -1,5 +1,6 @@
-import { env } from "cloudflare:workers";
+import { integrationRepository } from "@/db/repositories/integrations";
 import { RequestRateLimiter } from "@/lib/integrations/rate-limit";
+import { serverEnv } from "@/lib/runtime/env";
 import type { SourceStatus } from "./amo";
 import { type DashboardRange } from "./period";
 
@@ -46,11 +47,10 @@ export interface AlfaSale {
 }
 
 type AlfaRuntime = {
-  DB?: D1Database;
-  ALFA_BASE_URL?: string;
-  ALFA_EMAIL?: string;
-  ALFA_API_KEY?: string;
-  ALFA_BRANCH_IDS?: string;
+  baseUrl: string;
+  email: string;
+  apiKey: string;
+  branchIds: string[];
 };
 
 type AlfaPayment = {
@@ -97,14 +97,14 @@ function alfaDate(value: string): string {
   return `${day}.${month}.${year}`;
 }
 
-async function loadStoredAlfaData(db: D1Database): Promise<AlfaRawData | null> {
-  const result = await db.prepare(
-    `SELECT entity_type, payload, fetched_at
-     FROM integration_records
-     WHERE source = 'alfa'
-       AND entity_type IN ('pay', 'customer', 'pay_account', 'pay_item')`,
-  ).all();
-  if (result.results.length === 0) return null;
+async function loadStoredAlfaData(): Promise<AlfaRawData | null> {
+  const records = await integrationRepository.listPayloads("alfa", [
+    "pay",
+    "customer",
+    "pay_account",
+    "pay_item",
+  ]);
+  if (records.length === 0) return null;
 
   const data: AlfaRawData = {
     payments: [],
@@ -113,17 +113,17 @@ async function loadStoredAlfaData(db: D1Database): Promise<AlfaRawData | null> {
     paymentItems: [],
     fetchedAt: 0,
   };
-  for (const row of result.results as Array<{
-    entity_type: string;
-    payload: string;
-    fetched_at: number;
-  }>) {
-    const payload = JSON.parse(row.payload);
-    data.fetchedAt = Math.max(data.fetchedAt, Number(row.fetched_at));
-    if (row.entity_type === "pay") data.payments.push(payload as AlfaPayment);
-    else if (row.entity_type === "customer") data.customers.push(payload as AlfaCustomer);
-    else if (row.entity_type === "pay_account") data.paymentAccounts.push(payload as AlfaDictionaryItem);
-    else if (row.entity_type === "pay_item") data.paymentItems.push(payload as AlfaDictionaryItem);
+  for (const record of records) {
+    data.fetchedAt = Math.max(data.fetchedAt, record.fetchedAt);
+    if (record.entityType === "pay") {
+      data.payments.push(record.payload as AlfaPayment);
+    } else if (record.entityType === "customer") {
+      data.customers.push(record.payload as AlfaCustomer);
+    } else if (record.entityType === "pay_account") {
+      data.paymentAccounts.push(record.payload as AlfaDictionaryItem);
+    } else if (record.entityType === "pay_item") {
+      data.paymentItems.push(record.payload as AlfaDictionaryItem);
+    }
   }
   return data;
 }
@@ -310,7 +310,7 @@ class AlfaDashboardClient {
 }
 
 async function loadRawAlfaData(
-  runtime: Required<Pick<AlfaRuntime, "ALFA_BASE_URL" | "ALFA_EMAIL" | "ALFA_API_KEY">> & AlfaRuntime,
+  runtime: AlfaRuntime,
   range: DashboardRange,
   forceRefresh: boolean,
 ): Promise<AlfaRawData> {
@@ -322,14 +322,11 @@ async function loadRawAlfaData(
 
   const request = (async () => {
     const client = new AlfaDashboardClient(
-      runtime.ALFA_BASE_URL.trim().replace(/\/+$/, ""),
-      runtime.ALFA_EMAIL,
-      runtime.ALFA_API_KEY,
+      runtime.baseUrl.trim().replace(/\/+$/, ""),
+      runtime.email,
+      runtime.apiKey,
     );
-    let branchIds = (runtime.ALFA_BRANCH_IDS ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
+    let branchIds = runtime.branchIds;
     if (branchIds.length === 0) {
       const branches = await client.collection<{ id: number }>(
         "/v2api/branch/index",
@@ -509,29 +506,34 @@ export async function getAlfaDashboardData(
   range: DashboardRange,
   forceRefresh = false,
 ): Promise<AlfaDashboardData> {
-  const runtime = env as unknown as AlfaRuntime;
-  if (!runtime.ALFA_BASE_URL || !runtime.ALFA_EMAIL || !runtime.ALFA_API_KEY) {
-    if (runtime.DB) {
-      try {
-        const stored = await loadStoredAlfaData(runtime.DB);
-        if (stored) {
-          return buildAlfaDashboardData(
-            stored,
-            range,
-            "stored",
-            "Показана последняя сохранённая копия AlphaCRM",
-          );
-        }
-      } catch {
-        // Ни live-подключение, ни сохранённый снимок недоступны.
+  const settings = serverEnv();
+  if (!settings.alfaBaseUrl || !settings.alfaEmail || !settings.alfaApiKey) {
+    try {
+      const stored = await loadStoredAlfaData();
+      if (stored) {
+        return buildAlfaDashboardData(
+          stored,
+          range,
+          "stored",
+          "Показана последняя сохранённая копия AlphaCRM",
+        );
       }
+    } catch {
+      // Ни live-подключение, ни сохранённый снимок недоступны.
     }
     return emptyAlfaData("Подключение AlphaCRM не настроено");
   }
 
+  const runtime: AlfaRuntime = {
+    baseUrl: settings.alfaBaseUrl,
+    email: settings.alfaEmail,
+    apiKey: settings.alfaApiKey,
+    branchIds: settings.alfaBranchIds,
+  };
+
   try {
     const raw = await loadRawAlfaData(
-      runtime as Required<Pick<AlfaRuntime, "ALFA_BASE_URL" | "ALFA_EMAIL" | "ALFA_API_KEY">> & AlfaRuntime,
+      runtime,
       range,
       forceRefresh,
     );
@@ -550,23 +552,21 @@ export async function getAlfaDashboardData(
         "AlphaCRM временно недоступна — показаны последние данные",
       );
     }
-    if (runtime.DB) {
-      try {
-        const stored = await loadStoredAlfaData(runtime.DB);
-        if (stored) {
-          return buildAlfaDashboardData(
-            stored,
-            range,
-            "stored",
-            "Показана последняя сохранённая копия AlphaCRM",
-          );
-        }
-      } catch (storedError) {
-        console.error(
-          "AlphaCRM stored dashboard request failed:",
-          storedError instanceof Error ? storedError.message : "Unknown error",
+    try {
+      const stored = await loadStoredAlfaData();
+      if (stored) {
+        return buildAlfaDashboardData(
+          stored,
+          range,
+          "stored",
+          "Показана последняя сохранённая копия AlphaCRM",
         );
       }
+    } catch (storedError) {
+      console.error(
+        "AlphaCRM stored dashboard request failed:",
+        storedError instanceof Error ? storedError.message : "Unknown error",
+      );
     }
     return emptyAlfaData("Не удалось получить данные AlphaCRM");
   }

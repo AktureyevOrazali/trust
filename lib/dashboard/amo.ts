@@ -1,4 +1,5 @@
-import { env } from "cloudflare:workers";
+import { integrationRepository } from "@/db/repositories/integrations";
+import { serverEnv } from "@/lib/runtime/env";
 import {
   periodDates,
   periodEndSeconds,
@@ -57,12 +58,6 @@ export interface AmoDashboardData {
   kevByDate: Record<string, number>;
   updatedAt: string;
 }
-
-type AmoRuntime = {
-  DB?: D1Database;
-  AMO_BASE_URL?: string;
-  AMO_ACCESS_TOKEN?: string;
-};
 
 type AmoLead = {
   id: number;
@@ -449,119 +444,101 @@ async function getLiveAmoDashboardData(
 }
 
 async function getStoredAmoDashboardData(
-  db: D1Database,
   range: DashboardRange,
 ): Promise<AmoDashboardData | null> {
+  const records = await integrationRepository.listPayloads("amo", [
+    "leads",
+    "pipeline_statuses",
+    "users",
+    "unsorted",
+    "events",
+  ]);
+  if (records.length === 0) return null;
+
   const periodStart = periodStartSeconds(range);
   const periodEnd = periodEndSeconds(range);
-  const [stageResult, statusResult, managerResult, userResult, createdResult, run, unsortedResult, kevResult] =
-    await Promise.all([
-      db.prepare(
-        `SELECT CAST(json_extract(payload, '$.status_id') AS INTEGER) AS status_id,
-                COUNT(*) AS count,
-                COALESCE(SUM(CAST(json_extract(payload, '$.price') AS INTEGER)), 0) AS amount
-         FROM integration_records
-         WHERE source = 'amo' AND entity_type = 'leads'
-           AND CAST(json_extract(payload, '$.pipeline_id') AS INTEGER) = ?
-           AND CAST(json_extract(payload, '$.created_at') AS INTEGER) BETWEEN ? AND ?
-         GROUP BY status_id`,
-      ).bind(PIPELINE_ID, periodStart, periodEnd).all(),
-      db.prepare(
-        `SELECT payload FROM integration_records
-         WHERE source = 'amo' AND entity_type = 'pipeline_statuses' AND scope = ?`,
-      ).bind(String(PIPELINE_ID)).all(),
-      db.prepare(
-        `SELECT CAST(json_extract(payload, '$.responsible_user_id') AS INTEGER) AS user_id,
-                CAST(json_extract(payload, '$.status_id') AS INTEGER) AS status_id,
-                COUNT(*) AS count
-         FROM integration_records
-         WHERE source = 'amo' AND entity_type = 'leads'
-           AND CAST(json_extract(payload, '$.pipeline_id') AS INTEGER) = ?
-           AND CAST(json_extract(payload, '$.created_at') AS INTEGER) BETWEEN ? AND ?
-           AND CAST(json_extract(payload, '$.status_id') AS INTEGER) NOT IN (142, 143)
-         GROUP BY user_id, status_id`,
-      ).bind(PIPELINE_ID, periodStart, periodEnd).all(),
-      db.prepare(
-        `SELECT payload FROM integration_records
-         WHERE source = 'amo' AND entity_type = 'users'`,
-      ).all(),
-      db.prepare(
-        `SELECT payload
-         FROM integration_records
-         WHERE source = 'amo' AND entity_type = 'leads'
-           AND CAST(json_extract(payload, '$.pipeline_id') AS INTEGER) = ?
-           AND CAST(json_extract(payload, '$.created_at') AS INTEGER) BETWEEN ? AND ?`,
-      ).bind(PIPELINE_ID, periodStart, periodEnd).all(),
-      db.prepare(
-        `SELECT completed_at FROM integration_sync_runs
-         WHERE source = 'amo' AND status IN ('completed', 'completed_with_errors')
-         ORDER BY started_at DESC LIMIT 1`,
-      ).first<{ completed_at: number | null }>(),
-      db.prepare(
-        `SELECT CAST(json_extract(payload, '$.created_at') AS INTEGER) AS created_at
-         FROM integration_records
-         WHERE source = 'amo' AND entity_type = 'unsorted'
-           AND CAST(json_extract(payload, '$.pipeline_id') AS INTEGER) = ?
-           AND CAST(json_extract(payload, '$.created_at') AS INTEGER) BETWEEN ? AND ?`,
-      ).bind(PIPELINE_ID, periodStart, periodEnd).all(),
-      db.prepare(
-        `SELECT payload
-         FROM integration_records
-         WHERE source = 'amo' AND entity_type = 'events'
-           AND json_extract(payload, '$.type') = 'lead_status_changed'
-           AND CAST(json_extract(payload, '$.created_at') AS INTEGER) BETWEEN ? AND ?
-           AND CAST(json_extract(payload, '$.value_after[0].lead_status.id') AS INTEGER) = ?
-           AND CAST(json_extract(payload, '$.value_after[0].lead_status.pipeline_id') AS INTEGER) = ?`,
-      ).bind(periodStart, periodEnd, KEV_STATUS_ID, PIPELINE_ID).all(),
-    ]);
+  const storedLeads = records
+    .filter((record) => record.entityType === "leads")
+    .map((record) => record.payload as AmoLead)
+    .filter(
+      (lead) =>
+        lead.pipeline_id === PIPELINE_ID &&
+        lead.created_at >= periodStart &&
+        lead.created_at <= periodEnd,
+    );
+  const statusDefinitions = records
+    .filter(
+      (record) =>
+        record.entityType === "pipeline_statuses" &&
+        record.scope === String(PIPELINE_ID),
+    )
+    .map(
+      (record) =>
+        record.payload as { id: number; name: string; sort: number },
+    );
 
-  if (!run?.completed_at && statusResult.results.length === 0) return null;
-
-  const statusMap = new Map<number, { name: string; sort: number }>();
-  for (const row of statusResult.results as Array<{ payload: string }>) {
-    const status = JSON.parse(row.payload) as { id: number; name: string; sort: number };
-    statusMap.set(status.id, { name: status.name, sort: status.sort });
-  }
-  const stageCounts = new Map(
-    (stageResult.results as Array<{ status_id: number; count: number; amount: number }>).map(
-      (row) => [row.status_id, { count: Number(row.count), amount: Number(row.amount) }],
-    ),
-  );
-  const stages = [...statusMap.entries()]
-    .map(([id, definition]) => ({
-      id,
-      name: definition.name,
-      count: stageCounts.get(id)?.count ?? 0,
-      amount: stageCounts.get(id)?.amount ?? 0,
-      sort: definition.sort,
-    }))
+  const stages = statusDefinitions
+    .map((status) => {
+      const leads = storedLeads.filter(
+        (lead) => lead.status_id === status.id,
+      );
+      return {
+        id: status.id,
+        name: status.name,
+        count: leads.length,
+        amount: leads.reduce(
+          (sum, lead) => sum + Number(lead.price ?? 0),
+          0,
+        ),
+        sort: status.sort,
+      };
+    })
     .sort((a, b) => a.sort - b.sort);
 
-  const users = new Map<number, string>();
-  for (const row of userResult.results as Array<{ payload: string }>) {
-    const user = JSON.parse(row.payload) as { id: number; name: string };
-    users.set(user.id, user.name);
-  }
+  const users = new Map(
+    records
+      .filter((record) => record.entityType === "users")
+      .map((record) => record.payload as { id: number; name: string })
+      .map((user) => [user.id, user.name] as const),
+  );
   const managerMap = new Map<number, ManagerSnapshot>();
-  for (const row of managerResult.results as Array<{ user_id: number; status_id: number; count: number }>) {
-    const manager = ensureManager(managerMap, users, row.user_id);
-    manager.total += Number(row.count);
-    manager.stageCounts[String(row.status_id)] = Number(row.count);
+  for (const lead of storedLeads.filter(
+    (candidate) => !CLOSED_STATUS_IDS.has(candidate.status_id),
+  )) {
+    const manager = ensureManager(
+      managerMap,
+      users,
+      lead.responsible_user_id,
+    );
+    manager.total += 1;
+    manager.stageCounts[String(lead.status_id)] =
+      (manager.stageCounts[String(lead.status_id)] ?? 0) + 1;
   }
 
-  const storedKevEvents = (kevResult.results as Array<{ payload: string }>).map(
-    (row) => JSON.parse(row.payload) as AmoEvent,
-  );
+  const unsorted = records
+    .filter((record) => record.entityType === "unsorted")
+    .map((record) => record.payload as AmoUnsorted)
+    .filter((item) => {
+      const createdAt = Number(item.created_at ?? 0);
+      return (
+        item.pipeline_id === PIPELINE_ID &&
+        createdAt >= periodStart &&
+        createdAt <= periodEnd
+      );
+    });
+  const storedKevEvents = records
+    .filter((record) => record.entityType === "events")
+    .map((record) => record.payload as AmoEvent)
+    .filter(
+      (event) =>
+        event.created_at >= periodStart && event.created_at <= periodEnd,
+    );
   const uniqueKev = uniqueKevEvents(storedKevEvents);
-  const storedLeads = (createdResult.results as Array<{ payload: string }>).map(
-    (row) => JSON.parse(row.payload) as AmoLead,
+  const kevLeadIds = kevPassedLeadIds(
+    storedLeads,
+    uniqueKev,
+    statusDefinitions,
   );
-  const statusDefinitions = [...statusMap.entries()].map(([id, status]) => ({
-    id,
-    name: status.name,
-  }));
-  const kevLeadIds = kevPassedLeadIds(storedLeads, uniqueKev, statusDefinitions);
-  const kevCount = kevLeadIds.size;
   addKevPassedByManager(
     managerMap,
     users,
@@ -569,26 +546,28 @@ async function getStoredAmoDashboardData(
     kevLeadIds,
   );
 
-  const leadsForTrend = storedLeads;
+  const fetchedAt = Math.max(...records.map((record) => record.fetchedAt));
   return {
     connected: true,
     sourceStatus: "stored",
     statusMessage: "Показана последняя сохранённая копия",
     activeDeals: stages.reduce((sum, stage) => sum + stage.count, 0),
     activeAmount: stages.reduce((sum, stage) => sum + stage.amount, 0),
-    unsorted: unsortedResult.results.length,
+    unsorted: unsorted.length,
     stages,
     managers: [...managerMap.values()].sort((a, b) => b.total - a.total),
     trend: buildTrend(
       [
-        ...leadsForTrend,
-        ...(unsortedResult.results as Array<{ created_at: number }>),
+        ...storedLeads,
+        ...unsorted.map((item) => ({
+          created_at: Number(item.created_at ?? 0),
+        })),
       ],
       range,
     ),
-    kevCount,
+    kevCount: kevLeadIds.size,
     kevByDate: kevCountsByDate(uniqueKev.values()),
-    updatedAt: run?.completed_at ? formatUpdatedAt(run.completed_at) : "нет данных",
+    updatedAt: formatUpdatedAt(fetchedAt),
   };
 }
 
@@ -596,7 +575,7 @@ export async function getAmoDashboardData(
   range: DashboardRange,
   forceRefresh = false,
 ): Promise<AmoDashboardData> {
-  const runtime = env as unknown as AmoRuntime;
+  const runtime = serverEnv();
   const key = rangeKey(range);
   const cached = cache.get(key);
   if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
@@ -606,11 +585,11 @@ export async function getAmoDashboardData(
   if (pending) return pending;
 
   const request = (async () => {
-    if (runtime.AMO_BASE_URL && runtime.AMO_ACCESS_TOKEN) {
+    if (runtime.amoBaseUrl && runtime.amoAccessToken) {
       try {
         const data = await getLiveAmoDashboardData(
-          runtime.AMO_BASE_URL,
-          runtime.AMO_ACCESS_TOKEN,
+          runtime.amoBaseUrl,
+          runtime.amoAccessToken,
           range,
         );
         cache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
@@ -630,16 +609,14 @@ export async function getAmoDashboardData(
       }
     }
 
-    if (runtime.DB) {
-      try {
-        const stored = await getStoredAmoDashboardData(runtime.DB, range);
-        if (stored) return stored;
-      } catch (error) {
-        console.error(
-          "amoCRM stored dashboard request failed:",
-          error instanceof Error ? error.message : "Unknown error",
-        );
-      }
+    try {
+      const stored = await getStoredAmoDashboardData(range);
+      if (stored) return stored;
+    } catch (error) {
+      console.error(
+        "amoCRM stored dashboard request failed:",
+        error instanceof Error ? error.message : "Unknown error",
+      );
     }
 
     return emptyAmoData(range, "Не удалось получить данные amoCRM");
