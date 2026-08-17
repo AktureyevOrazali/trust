@@ -4,7 +4,7 @@ Date: 2026-08-17
 
 ## Objective
 
-Move the application from the Cloudflare-specific vinext, Worker, Wrangler, and D1 runtime to standard Next.js on Netlify. Use managed Postgres as the system of record for synchronized CRM data and derived analytics. Preserve the existing sales dashboard, then add student and group dashboards whose operational data comes from AlphaCRM. The reviewed Google Sheets workbook defines the intended metrics but is not a production data source.
+Move the application from the Cloudflare-specific vinext, Worker, Wrangler, and D1 runtime to standard Next.js on Netlify. Use managed Postgres as the system of record for synchronized CRM data and derived analytics. Preserve the existing sales dashboard, then add student and group dashboards whose operational data comes from AlphaCRM. The reviewed Google Sheets workbook defines the phase-one formulas exactly but is not a production data source.
 
 ## Scope
 
@@ -16,11 +16,12 @@ The project will:
 - synchronize AlphaCRM and existing amoCRM data into Postgres;
 - retain historical snapshots needed for trends;
 - preserve the existing sales dashboard and monthly plans;
+- reproduce the Google Sheets formulas without correcting or redefining them in this phase;
 - add student overview, student registry, and group/teacher analytics;
 - expose synchronization freshness and data-quality warnings;
 - remove Cloudflare, vinext, Wrangler, Worker, Miniflare, D1 bindings, and Sites hosting configuration.
 
-The project will not write changes back to AlphaCRM or amoCRM. It will not use Google Sheets after metric definitions have been implemented. It will not expose student contact details on dashboard pages.
+The project will not write changes back to AlphaCRM or amoCRM. It will not use Google Sheets after its formulas have been encoded and parity-tested. It will not expose student contact details on dashboard pages. Formula improvements, corrected cohort logic, and alternative definitions are explicitly deferred to a future approved phase.
 
 ## Chosen architecture
 
@@ -81,7 +82,7 @@ The required AlphaCRM entity set is:
 - teacher;
 - subject.
 
-Teacher-rate data is stored when it is returned by the tenant's teacher endpoint. Lesson-level commission is the preferred source for actual teacher cost.
+Teacher-rate data is stored when it is returned by the tenant's teacher endpoint. Phase one uses the spreadsheet formula `hours * hourly rate`; lesson-level commission is retained only as source data for a possible future formula revision.
 
 ### Application tables
 
@@ -91,51 +92,65 @@ Teacher-rate data is stored when it is returned by the tenant's teacher endpoint
 
 No duplicate normalized copy of every CRM field will be introduced initially. Server-side query modules resolve raw JSONB records into typed domain objects. Focused aggregate tables may be added later only when measured query performance requires them.
 
-## Metric definitions
+## Spreadsheet-parity metric definitions
 
-### Student population and statuses
+Phase one treats the Google Sheets calculations as the compatibility contract. AlphaCRM replaces manually entered source rows, but aggregation formulas and their current range semantics remain unchanged. Known weaknesses are documented but not corrected.
 
-- A student is an AlphaCRM customer with `is_study = 1`.
-- Archived customers are excluded from current counts and remain available for historical and churn calculations.
-- Customer `study_status_id` is resolved through the `study_status` dictionary.
-- Status names are normalized case-insensitively into Active, Frozen, Finished, Booking, and Other/Unspecified.
-- All status cards reconcile to the total student count; unrecognized or blank statuses appear under Other/Unspecified.
-- Status share equals status count divided by total students, with zero-safe handling.
+### Student source columns
 
-### Attendance and lifetime
+- A student row corresponds to an AlphaCRM customer with `is_study = 1`.
+- Name comes from `customer.name`.
+- Attended lessons are counted from conducted lesson details with `is_attend = 1`.
+- Payment count and LTV are derived from the student's confirmed income payments.
+- Group and teacher are resolved from CGI membership, group, and teacher data.
+- Start and end dates use the student's AlphaCRM tariff/membership dates.
+- Status is the AlphaCRM study-status name and is compared to the exact sheet labels Active (`Активен`), Frozen (`Заморозка`), Finished (`Закончил`), and Booking (`Бронь`).
+- Study months reproduce the sheet's populated `Кол-во мес` value from the AlphaCRM study date interval.
+- Renewals reproduce the row formula `IF(months <= 0, blank, months - 1)`.
+- Subscription amount comes from the applicable AlphaCRM tariff price.
 
-- Attended lessons are conducted lessons whose detail row for the customer has `is_attend = 1`.
-- The student's study start is the earliest valid customer-tariff start date or group-membership start date.
-- The study end is the latest completed tariff or membership end date for inactive students; active students use the dashboard as-of date.
-- Lifetime months are the elapsed calendar months between study start and end/as-of date, with partial months represented as a decimal.
+### Student totals and status analytics
 
-### Renewals and retention
+- Total students reproduces `COUNTA(student names)`.
+- Active, Frozen, Finished, and Booking counts reproduce `COUNTIF(status, label)` independently.
+- Each displayed status percentage is its status count divided by total students.
+- No balancing Other/Unspecified percentage is added in phase one because it is not part of the source sheet formulas.
 
-- A renewal is a new customer-tariff period that begins after an earlier tariff period for the same student without a gap longer than 31 days.
-- Renewal rate equals successful renewal opportunities divided by all completed tariff periods that reached an end date in the selected cohort window.
-- Churn rate equals one minus renewal rate.
-- Repeat-payment revenue remains a separate financial metric and is not used as the renewal event.
+### Renewal, churn, and lifetime analytics
 
-### Payments and LTV
+- Renewal percentage reproduces `SUM(renewals) / (SUM(renewals) + finished students whose end date is on or before today and whose months are greater than zero)`, returning zero on error.
+- Churn percentage reproduces `100% - renewal percentage`.
+- Average lifetime reproduces the average of positive `Кол-во мес` values.
+- Maximum lifetime reproduces the maximum `Кол-во мес` value.
+- Average renewals reproduces the average of the renewal column, including its blank/zero behavior.
+- Maximum renewals reproduces the maximum of the renewal column.
+- Repeat-payment revenue remains a separate sales metric and does not replace the spreadsheet renewal formula.
 
-- Only confirmed income payments are included.
-- LTV is the sum of all confirmed income payments associated with a student.
-- Payment count is the number of those payment records.
-- Existing first-sale, repeat-sale, booking, payment-account, and payment-item classifications remain available on the sales dashboard.
+### LTV analytics
 
-### Group economics
+- Per-student LTV is the sum of confirmed income payments associated with that student.
+- Payment count is the count of those payment records.
+- Average and maximum LTV preserve the sheet's current `E6:E1000` range semantics. The compatibility dataset therefore uses the same descending-LTV row order and begins the aggregate at the equivalent of sheet row 6.
+- The intentional parity rule above is not corrected to include the first three student rows in phase one.
 
-- Current group size is the count of non-ended CGI memberships for students who are not archived.
-- Group revenue is confirmed income whose payment record has the group ID and whose document date is inside the selected period.
-- Payments without a group remain in overall revenue and appear in a data-quality warning; they are not allocated heuristically.
-- Conducted hours are the sum of conducted lesson duration divided by 60 for lessons linked to the group and period.
-- Teacher cost uses lesson-detail commission when present. If commission is absent, the configured teacher-rate rules are applied. A group without enough rate data is marked Unpriced instead of assuming zero cost.
-- Gross profit equals group revenue minus priced teacher cost.
-- Margin equals gross profit divided by group revenue, with zero-safe handling.
+### Group analytics
+
+- The group list reproduces the unique nonblank group names from student rows, excluding only the exact value `ИНД`.
+- The displayed teacher reproduces the first matching student's teacher for the group.
+- Student count reproduces `COUNTIF(student group, group name)`.
+- Group gross revenue reproduces the sum of current subscription amounts for students in the group whose status is exactly `Активен`.
+- Group hours come from conducted AlphaCRM lesson duration for that group.
+- Group expense reproduces `hours * teacher hourly rate`, returning zero when the rate lookup fails, as in the sheet.
+- Gross profit reproduces `group gross revenue - group expense`.
+- Average and maximum group revenue reproduce `AVERAGE` and `MAX` over the group revenue column.
+- Average and maximum gross profit reproduce `AVERAGE` and `MAX` over the gross-profit column.
+- Average profit per group remains the same duplicate average of the gross-profit column used in the sheet.
+
+Any future change to these definitions requires a separate specification, a reconciliation report against the phase-one baseline, and explicit approval.
 
 ## Dashboard design
 
-The existing page becomes a three-tab dashboard shell sharing period, branch, refresh, source-status, and data-freshness controls.
+The existing page becomes a three-tab dashboard shell sharing branch, refresh, source-status, and data-freshness controls. The Sales tab keeps its period selector. Student and group spreadsheet-parity cards use their current-snapshot inputs; only explicitly historical charts use a time range.
 
 ### Sales
 
@@ -154,14 +169,14 @@ The overview contains:
 - six-month active-student trend;
 - risk list for expiring tariffs, no recent attendance, or depleted lesson balance.
 
-The registry contains searchable and filterable rows for name, status, group, teacher, study dates, attended lessons, payment count, LTV, active tariff, and lesson balance. Filters cover branch, teacher, group, status, and period. Contact details are omitted.
+The registry contains searchable and filterable rows for name, status, group, teacher, study dates, attended lessons, payment count, LTV, active tariff, and lesson balance. Filters cover branch, teacher, group, and status. Contact details are omitted.
 
 ### Groups
 
 The groups view contains:
 
-- summary cards for active groups, students, revenue, priced teacher cost, gross profit, and margin;
-- group table with teacher, active students, conducted hours, revenue, cost, profit, and margin;
+- summary cards for groups, students, spreadsheet-formula revenue, teacher expense, and gross profit;
+- group table with teacher, students, conducted hours, revenue, expense, and gross profit;
 - rankings by revenue and profit;
 - teacher rollup;
 - warnings for missing teacher, missing rate, payments without group, and groups with no active membership.
@@ -205,7 +220,7 @@ Cutover does not delete the existing Cloudflare deployment or D1 database. They 
 
 ## Testing strategy
 
-- Unit tests cover date parsing, status normalization, renewal opportunities, churn, LTV, attendance, group revenue, teacher cost, and margin.
+- Unit tests cover date parsing, exact status labels, spreadsheet renewal/churn formulas, row-compatible LTV ranges, attendance, group revenue, teacher expense, and gross profit.
 - Repository tests run against a local Postgres database and verify upserts, JSONB payloads, advisory locking, snapshots, and monthly plans.
 - Integration-client tests use representative sanitized AlphaCRM and amoCRM fixtures for pagination, retries, and partial failures.
 - Route tests verify input validation, no PII leakage, stale status, and empty states.
@@ -221,9 +236,10 @@ Cutover does not delete the existing Cloudflare deployment or D1 database. They 
 - Postgres migrations create all required tables and the application connects through server-only configuration.
 - Scheduled and manual synchronization cannot overlap and preserve the last successful data on failure.
 - Sales metrics remain consistent with the current dashboard for the same period.
-- Student status counts reconcile to the total, including Other/Unspecified.
-- Renewal, churn, lifetime, attendance, payment count, and LTV follow the definitions above.
-- Group revenue, hours, teacher cost, profit, and margin expose missing attribution instead of silently treating it as zero.
+- Student and group metrics reconcile to the values produced by the reviewed Google Sheets formulas for the same normalized input rows.
+- No phase-one metric silently substitutes a corrected cohort, retention, LTV, group-revenue, or group-expense definition.
+- Renewal, churn, lifetime, attendance, payment count, and LTV follow the spreadsheet-parity definitions above.
+- Group revenue, hours, teacher expense, and gross profit follow the spreadsheet-parity definitions above, including zero-on-missing-rate behavior.
 - Six-month student history is served from stored snapshots.
 - Dashboard API responses contain no contact information or secrets.
 - Build, automated tests, database checks, and responsive visual verification pass.
