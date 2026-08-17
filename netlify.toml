@@ -7,3 +7,6 @@
 
 [functions."crm-sync-scheduled"]
   schedule = "@hourly"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
