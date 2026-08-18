@@ -1,9 +1,9 @@
-import { DashboardClient } from "./dashboard-client";
+import { DashboardShell } from "./dashboard/dashboard-shell";
 import { getDashboardData } from "@/lib/dashboard";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const data = await getDashboardData();
-  return <DashboardClient data={data} />;
+  return <DashboardShell salesData={data} />;
 }

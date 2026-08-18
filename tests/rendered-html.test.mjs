@@ -56,3 +56,23 @@ test("limits AlphaCRM load and exposes a compact daily chart", async () => {
   assert.match(client, /day-card/);
   assert.doesNotMatch(client, /className="combo-chart"/);
 });
+
+test("renders accessible Sales, Students, and Groups dashboard tabs", async () => {
+  const [shell, students, groups] = await Promise.all([
+    source("app/dashboard/dashboard-shell.tsx"),
+    source("app/dashboard/students-dashboard.tsx"),
+    source("app/dashboard/groups-dashboard.tsx"),
+  ]);
+
+  assert.match(shell, /role="tablist"/);
+  assert.match(shell, />Продажи</);
+  assert.match(shell, />Ученики</);
+  assert.match(shell, />Группы</);
+  assert.match(shell, /aria-selected/);
+  assert.match(shell, /aria-controls/);
+  assert.match(students, /Процент продления/);
+  assert.match(students, /Процент оттока/);
+  assert.match(students, /Реестр учеников/);
+  assert.match(groups, /Валовая прибыль/);
+  assert.match(groups, /Сводка по преподавателям/);
+});
