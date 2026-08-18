@@ -1,5 +1,6 @@
 import type { AnalyticsRepository } from "../../db/repositories/analytics.ts";
 import { analyticsRepository } from "../../db/repositories/analytics.ts";
+import { ensureTeacherRates } from "../../db/repositories/teacher-rates.ts";
 import { normalizeAlphaRecords } from "./alpha-normalize.ts";
 import { calculateGroupMetrics } from "./spreadsheet-parity.ts";
 import { analyticsFilterOptions, matchesStudentFilters } from "./students.ts";
@@ -62,6 +63,10 @@ export async function getGroupsDashboard(
 ): Promise<GroupsDashboardData> {
   const records = await repository.listAlphaRecords(ANALYTICS_ENTITIES);
   const normalized = normalizeAlphaRecords(records, today);
+  const teacherRateSettings = await ensureTeacherRates(records);
+  const teacherRates = new Map(
+    teacherRateSettings.map((setting) => [setting.teacher, setting.rate]),
+  );
   const selectedIds = new Set(
     normalized.students
       .filter((student) => matchesStudentFilters(student, {
@@ -77,7 +82,7 @@ export async function getGroupsDashboard(
   const calculated = calculateGroupMetrics(
     groupStudents,
     [...normalized.groupHours].map(([group, hours]) => ({ group, hours })),
-    [...normalized.teacherRates].map(([teacher, rate]) => ({ teacher, rate })),
+    [...teacherRates].map(([teacher, rate]) => ({ teacher, rate })),
   );
   const rows = calculated.rows.filter((row) => !filters.group || row.group === filters.group);
   const metrics = {
@@ -88,11 +93,24 @@ export async function getGroupsDashboard(
     maximumGrossProfit: Math.max(0, ...rows.map((row) => row.grossProfit)),
   };
 
+  const missingRateCount = groupStudents.filter((student) =>
+    student.teacher && !(teacherRates.get(student.teacher) ?? 0),
+  ).length;
+  const warnings = normalized.warnings.filter((warning) => warning.code !== "missingRate");
+  if (missingRateCount > 0) {
+    warnings.push({
+      code: "missingRate",
+      message: "У преподавателей не указана часовая ставка",
+      count: missingRateCount,
+    });
+  }
+
   return {
     metrics,
     teacherRollups: teacherRollups(rows),
+    teacherRates: teacherRateSettings,
     filters: analyticsFilterOptions(normalized.students, normalized.branches),
-    warnings: normalized.warnings,
+    warnings,
     freshness: normalized.freshness,
   };
 }

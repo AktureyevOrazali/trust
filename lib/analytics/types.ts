@@ -151,6 +151,13 @@ export interface TeacherRollupRow {
 export interface GroupsDashboardData {
   metrics: GroupMetrics;
   teacherRollups: TeacherRollupRow[];
+  teacherRates: Array<{
+    branchId: string;
+    teacherId: string;
+    teacher: string;
+    rate: number;
+    source: "sheet_seed" | "manual";
+  }>;
   filters: AnalyticsFilterOptions;
   warnings: DataQualityWarning[];
   freshness: DataFreshness;

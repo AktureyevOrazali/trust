@@ -513,10 +513,6 @@ export function normalizeAlphaRecords(
     }
   }
 
-  for (const student of groupStudents) {
-    if (student.teacher && !teacherRates.has(student.teacher)) bump(warnings, "missingRate");
-  }
-
   return {
     students,
     groupStudents,

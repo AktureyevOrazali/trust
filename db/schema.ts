@@ -5,6 +5,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -89,5 +90,21 @@ export const analyticsDailySnapshots = pgTable(
       table.snapshotDate,
       table.branchId,
     ),
+  ],
+);
+
+export const teacherRates = pgTable(
+  "teacher_rates",
+  {
+    branchId: text("branch_id").notNull(),
+    teacherId: text("teacher_id").notNull(),
+    teacherName: text("teacher_name").notNull(),
+    hourlyRate: integer("hourly_rate").notNull().default(0),
+    source: text("source").notNull().default("manual"),
+    updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.branchId, table.teacherId] }),
+    index("idx_teacher_rates_name").on(table.teacherName),
   ],
 );
