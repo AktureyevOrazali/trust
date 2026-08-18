@@ -166,7 +166,7 @@ function lessonDuration(payload: JsonObject): number {
   const from = text(payload.time_from, payload.start_time);
   const to = text(payload.time_to, payload.end_time);
   const parseTime = (value: string) => {
-    const match = value.match(/(?:T|^)(\d{1,2}):(\d{2})/);
+    const match = value.match(/(?:T|\s|^)(\d{1,2}):(\d{2})(?::\d{2})?$/);
     return match ? Number(match[1]) * 60 + Number(match[2]) : null;
   };
   const fromMinutes = parseTime(from);
@@ -183,8 +183,20 @@ function details(payload: JsonObject): JsonObject[] {
 function currentMembership(payload: JsonObject, today: string): boolean {
   const active = booleanValue(payload.is_active ?? payload.active);
   if (active === false) return false;
-  const end = dateValue(payload.end_date, payload.date_to, payload.finish_date);
+  const end = dateValue(
+    payload.e_date,
+    payload.end_date,
+    payload.date_to,
+    payload.finish_date,
+    payload.paid_till,
+  );
   return !end || end >= today;
+}
+
+function formulaStatus(value: string): string {
+  const normalized = value.toLocaleLowerCase("ru");
+  if (normalized === "завершил" || normalized === "завершила") return "Закончил";
+  return value;
 }
 
 function warningList(counts: Map<string, number>): DataQualityWarning[] {
@@ -298,8 +310,8 @@ export function normalizeAlphaRecords(
       if (!target.some((membership) => membership.groupId === groupId)) {
         target.push({
           groupId,
-          start: dateValue(payload.start_date, payload.date_from, payload.begin_date),
-          end: dateValue(payload.end_date, payload.date_to, payload.finish_date),
+          start: dateValue(payload.b_date, payload.start_date, payload.date_from, payload.begin_date),
+          end: dateValue(payload.e_date, payload.end_date, payload.date_to, payload.finish_date),
           current: currentMembership(payload, today),
         });
       }
@@ -392,40 +404,49 @@ export function normalizeAlphaRecords(
       return group ? [{ ...membership, ...group }] : [];
     });
     const groupNames = groupEntries.map((entry) => entry.name);
-    const teacherNames = groupEntries.flatMap((entry) =>
+    const groupTeacherNames = groupEntries.flatMap((entry) =>
       entry.teachers.map((teacherId) => teachers.get(scopedKey(record.scope, teacherId)) ?? ""),
     ).filter(Boolean);
+    const directTeacherNames = teacherIds(payload)
+      .map((teacherId) => teachers.get(scopedKey(record.scope, teacherId)) ?? "")
+      .filter(Boolean);
+    const teacherNames = [...new Set([...groupTeacherNames, ...directTeacherNames])];
     if (groupNames.length === 0) bump(warnings, "missingGroup");
     if (groupEntries.some((entry) => entry.teachers.length === 0) || (groupNames.length > 0 && teacherNames.length === 0)) {
       bump(warnings, "missingTeacher");
     }
 
     const statusId = text(payload.study_status_id, payload.status_id, object(payload.study_status).id);
-    const status = text(
+    const status = formulaStatus(text(
       payload.study_status_name,
       object(payload.study_status).name,
       statusId ? studyStatuses.get(scopedKey(record.scope, statusId)) : "",
       payload.status_name,
-    );
+    ));
     if (!status) bump(warnings, "missingStatus");
 
     const tariffsForCustomer = customerTariffs.get(key) ?? [];
     const sortedTariffs = [...tariffsForCustomer].sort((left, right) =>
-      text(right.end_date, right.date_to, right.start_date, right.date_from)
-        .localeCompare(text(left.end_date, left.date_to, left.start_date, left.date_from)),
+      text(right.e_date, right.end_date, right.date_to, right.paid_till, right.b_date, right.start_date, right.date_from)
+        .localeCompare(text(left.e_date, left.end_date, left.date_to, left.paid_till, left.b_date, left.start_date, left.date_from)),
     );
     const currentTariff = sortedTariffs.find((tariff) => currentMembership(tariff, today)) ?? sortedTariffs[0] ?? {};
     const tariffId = text(currentTariff.tariff_id, object(currentTariff.tariff).id);
     const tariffDefinition = tariffId ? tariffs.get(scopedKey(record.scope, tariffId)) : undefined;
     const startDate = dateValue(
+      currentTariff.b_date,
       currentTariff.start_date,
       currentTariff.date_from,
+      payload.b_date,
       payload.study_start_date,
       groupEntries[0]?.start,
     );
     const endDate = dateValue(
+      currentTariff.e_date,
       currentTariff.end_date,
       currentTariff.date_to,
+      currentTariff.paid_till,
+      payload.e_date,
       payload.study_end_date,
       groupEntries[0]?.end,
     );
@@ -441,7 +462,7 @@ export function normalizeAlphaRecords(
     const firstGroup = groupEntries[0];
     const firstTeacher = firstGroup?.teachers
       .map((teacherId) => teachers.get(scopedKey(record.scope, teacherId)) ?? "")
-      .find(Boolean) ?? "";
+      .find(Boolean) ?? directTeacherNames[0] ?? "";
     const formulaRow: StudentFormulaRow = {
       id: key,
       name: text(payload.name, customer),
@@ -464,11 +485,15 @@ export function normalizeAlphaRecords(
       groups: groupNames,
       teachers: [...new Set(teacherNames)],
       lessonBalance: numeric(
+        payload.paid_lesson_count,
+        currentTariff.paid_lesson_count,
         currentTariff.lesson_balance,
         currentTariff.lessons_left,
         currentTariff.balance,
       ),
       lessonBalanceKnown: [
+        payload.paid_lesson_count,
+        currentTariff.paid_lesson_count,
         currentTariff.lesson_balance,
         currentTariff.lessons_left,
         currentTariff.balance,

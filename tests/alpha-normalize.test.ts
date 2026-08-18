@@ -32,6 +32,8 @@ const records: StoredAlphaRecord[] = [
     name: "Одинаковое имя",
     is_study: 1,
     study_status_id: "s1",
+    paid_lesson_count: 7,
+    teacher_ids: ["t2"],
     phone: "+70000000000",
   }),
   record("customer", "c2", {
@@ -62,8 +64,8 @@ const records: StoredAlphaRecord[] = [
     id: "ct1",
     customer_id: "c1",
     tariff_id: "tr1",
-    date_from: "01.04.2026",
-    date_to: "01.09.2026",
+    b_date: "01.04.2026",
+    e_date: "01.09.2026",
     lessons_left: 2,
   }),
   record("pay", "p1", { id: "p1", customer_id: "c1", income: "100 000", is_confirmed: 1 }),
@@ -73,8 +75,8 @@ const records: StoredAlphaRecord[] = [
     id: "l1",
     status: 3,
     date: "2026-08-17",
-    time_from: "10:00",
-    time_to: "11:30",
+    time_from: "2026-08-17 10:00:00",
+    time_to: "2026-08-17 11:30:00",
     group_ids: ["g1"],
     details: [
       { customer_id: "c1", is_attend: 1 },
@@ -110,7 +112,7 @@ test("normalizes AlphaCRM records using IDs and exact spreadsheet inputs", () =>
   assert.equal(first.months, 5);
   assert.equal(first.renewals, 4);
   assert.equal(first.activeTariff, "Стандарт");
-  assert.equal(first.lessonBalance, 2);
+  assert.equal(first.lessonBalance, 7);
   assert.equal(second.status, "Заморозка");
   assert.equal(second.ltv, 200_000);
   assert.equal(second.attendedLessons, 0);
@@ -120,6 +122,25 @@ test("normalizes AlphaCRM records using IDs and exact spreadsheet inputs", () =>
   assert.equal(normalized.teacherRates.get("Учитель 2"), 3000);
   assert.equal(normalized.freshness.status, "stored");
   assert.doesNotMatch(JSON.stringify(normalized.students), /\+70000000000/);
+});
+
+test("maps AlphaCRM completion status to the unchanged sheet formula vocabulary", () => {
+  const completedRecords = [
+    record("study_status", "done", { id: "done", name: "Завершил" }),
+    record("customer", "done-customer", {
+      id: "done-customer",
+      name: "Завершивший ученик",
+      is_study: 1,
+      study_status_id: "done",
+      b_date: "2026-01-01",
+      e_date: "2026-08-01",
+    }),
+  ];
+  const normalized = normalizeAlphaRecords(completedRecords, new Date("2026-08-18T12:00:00Z"));
+
+  assert.equal(normalized.students[0].status, "Закончил");
+  assert.equal(normalized.students[0].startDate, "2026-01-01");
+  assert.equal(normalized.students[0].endDate, "2026-08-01");
 });
 
 test("preserves the workbook group formula behavior after normalization", () => {
