@@ -1,4 +1,4 @@
-import { asc, eq, gte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray } from "drizzle-orm";
 
 import { db } from "../index.ts";
 import { analyticsDailySnapshots, integrationRecords } from "../schema.ts";
@@ -7,7 +7,7 @@ export type DailySnapshot = typeof analyticsDailySnapshots.$inferSelect;
 export type DailySnapshotInput = typeof analyticsDailySnapshots.$inferInsert;
 
 export interface AnalyticsRepository {
-  listAlphaRecords(): Promise<
+  listAlphaRecords(entityTypes?: string[]): Promise<
     Array<{
       scope: string;
       entityType: string;
@@ -21,8 +21,8 @@ export interface AnalyticsRepository {
 }
 
 export const analyticsRepository: AnalyticsRepository = {
-  listAlphaRecords() {
-    return db
+  listAlphaRecords(entityTypes) {
+    const query = db
       .select({
         scope: integrationRecords.scope,
         entityType: integrationRecords.entityType,
@@ -30,8 +30,15 @@ export const analyticsRepository: AnalyticsRepository = {
         payload: integrationRecords.payload,
         fetchedAt: integrationRecords.fetchedAt,
       })
-      .from(integrationRecords)
-      .where(eq(integrationRecords.source, "alfa"));
+      .from(integrationRecords);
+    return query.where(
+      entityTypes && entityTypes.length > 0
+        ? and(
+            eq(integrationRecords.source, "alfa"),
+            inArray(integrationRecords.entityType, entityTypes),
+          )
+        : eq(integrationRecords.source, "alfa"),
+    );
   },
 
   listDailySnapshots(fromDate) {

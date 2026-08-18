@@ -258,7 +258,15 @@ export class AlfaClient {
           const tariffs = await this.collection(
             `/v2api/${branchId}/customer-tariff/index?customer_id=${encodeURIComponent(customerId)}`,
           );
-          addRecords("customer_tariff", tariffs, branchId);
+          addRecords(
+            "customer_tariff",
+            tariffs.map((tariff) =>
+              tariff && typeof tariff === "object" && !Array.isArray(tariff)
+                ? { customer_id: customerId, ...tariff }
+                : tariff,
+            ),
+            branchId,
+          );
         } catch (error) {
           result.errors.push({
             source: "alfa",

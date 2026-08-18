@@ -88,6 +88,12 @@ export function calculateGroupMetrics(
   groupHours: GroupHours[],
   teacherRates: TeacherRate[],
 ): GroupMetrics {
+  const orderedStudents = [...students].sort(
+    (left, right) =>
+      right.ltv - left.ltv ||
+      left.name.localeCompare(right.name, "ru") ||
+      left.id.localeCompare(right.id),
+  );
   const hoursByGroup = new Map(
     groupHours.map((entry) => [entry.group, entry.hours]),
   );
@@ -95,7 +101,7 @@ export function calculateGroupMetrics(
     teacherRates.map((entry) => [entry.teacher, entry.rate]),
   );
   const uniqueGroups = [...new Set(
-    students
+    orderedStudents
       .map((student) => student.group)
       .filter((group) => group !== "" && group !== "ИНД"),
   )];
@@ -104,7 +110,7 @@ export function calculateGroupMetrics(
   const groups = uniqueGroups.slice(1);
 
   const rows: GroupMetricRow[] = groups.map((group) => {
-    const members = students.filter((student) => student.group === group);
+    const members = orderedStudents.filter((student) => student.group === group);
     const teacher = members[0]?.teacher ?? "";
     const hours = hoursByGroup.get(group) ?? 0;
     const hasRate = rateByTeacher.has(teacher);
