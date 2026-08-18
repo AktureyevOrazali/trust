@@ -141,6 +141,7 @@ test("maps AlphaCRM completion status to the unchanged sheet formula vocabulary"
   assert.equal(normalized.students[0].status, "Закончил");
   assert.equal(normalized.students[0].startDate, "2026-01-01");
   assert.equal(normalized.students[0].endDate, "2026-08-01");
+  assert.equal(normalized.warnings.some((warning) => warning.code === "missingGroup"), false);
 });
 
 test("preserves the workbook group formula behavior after normalization", () => {

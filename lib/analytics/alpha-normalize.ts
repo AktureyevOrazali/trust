@@ -411,7 +411,6 @@ export function normalizeAlphaRecords(
       .map((teacherId) => teachers.get(scopedKey(record.scope, teacherId)) ?? "")
       .filter(Boolean);
     const teacherNames = [...new Set([...groupTeacherNames, ...directTeacherNames])];
-    if (groupNames.length === 0) bump(warnings, "missingGroup");
     if (groupEntries.some((entry) => entry.teachers.length === 0) || (groupNames.length > 0 && teacherNames.length === 0)) {
       bump(warnings, "missingTeacher");
     }
@@ -424,6 +423,7 @@ export function normalizeAlphaRecords(
       payload.status_name,
     ));
     if (!status) bump(warnings, "missingStatus");
+    if (status === "Активен" && groupNames.length === 0) bump(warnings, "missingGroup");
 
     const tariffsForCustomer = customerTariffs.get(key) ?? [];
     const sortedTariffs = [...tariffsForCustomer].sort((left, right) =>
