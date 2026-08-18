@@ -1,100 +1,124 @@
-# vinext-starter
+# РНП: аналитика продаж, учеников и групп
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Публичный Next.js-дэшборд центра китайского языка. Продажи собираются из amoCRM, ученики и группы - из AlphaCRM. Текущие данные и исторические срезы хранятся только в Netlify Postgres.
 
-## Prerequisites
+Production: [trust-alpha-dashboard.netlify.app](https://trust-alpha-dashboard.netlify.app)
+
+## Правила данных
+
+- AlphaCRM является единственным production-источником учеников, групп, занятий, тарифов и оплат.
+- Google Sheets используется только как зафиксированный контракт формул и обезличенный тестовый набор. Приложение не читает таблицу в runtime.
+- Формулы продления, оттока, срока обучения, LTV и экономики групп повторяют текущие формулы таблицы без исправлений.
+- API дэшборда не возвращают телефон, email, адрес, дату рождения и заметки клиента.
+- Неудачная синхронизация не удаляет последний успешный набор записей. После 36 часов сохранённые данные отмечаются как устаревшие.
+
+## Требования
 
 - Node.js `>=22.13.0`
+- Netlify CLI через `npx netlify-cli`
+- привязанный Netlify site с включённой Netlify Database
 
-## Quick Start
+## Локальный запуск
 
-```bash
+```powershell
 npm install
-npm run dev
+Copy-Item .env.example .env.local
+npx netlify-cli dev
+```
+
+`netlify dev` запускает локальную Postgres-базу и Netlify Functions. Если `NETLIFY_DB_URL` уже задан вручную, интерфейс можно запустить командой `npm run dev`.
+
+Проверки:
+
+```powershell
+npm test
+npm run lint
 npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+## Переменные окружения
 
-## Included Shape
+Все значения задаются в Netlify для Functions и Runtime. Секреты нельзя помещать в git, логи или клиентский код.
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+| Переменная | Обязательность | Назначение |
+| --- | --- | --- |
+| `NETLIFY_DB_URL` | автоматически | строка подключения Netlify Database |
+| `URL` | автоматически | публичный origin сайта для фоновых вызовов |
+| `SYNC_SECRET` | обязательно | длинный случайный секрет ручной синхронизации |
+| `AMO_BASE_URL` | обязательно для продаж | URL аккаунта amoCRM |
+| `AMO_ACCESS_TOKEN` | обязательно для продаж | серверный токен amoCRM |
+| `ALFA_BASE_URL` | обязательно | URL tenant AlphaCRM / s20.online |
+| `ALFA_EMAIL` | обязательно | email API-пользователя AlphaCRM |
+| `ALFA_API_KEY` | обязательно | API-ключ AlphaCRM |
+| `ALFA_BRANCH_IDS` | опционально | ID филиалов через запятую; без значения филиалы обнаруживаются автоматически |
 
-## Workspace Auth Headers
+## Postgres и миграции
 
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
+Схема находится в `db/schema.ts`, а версионируемый SQL - в `netlify/database/migrations/`. Netlify автоматически применяет эти миграции перед публикацией production и deploy preview. Ошибка миграции блокирует публикацию.
 
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
+Локальная проверка состояния и применение ожидающих миграций:
 
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```powershell
+npx netlify-cli database status
+npx netlify-cli database migrations apply
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+Не изменяйте содержимое уже применённой миграции. Для следующего изменения схемы создавайте новый файл.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## Синхронизация CRM
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+Опубликованный production-сайт запускает `crm-sync-scheduled` каждый час. Scheduled function ставит длительную работу в `crm-sync-background`; Postgres advisory lock не допускает пересечения запусков.
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+Ручной запуск всех источников:
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+```powershell
+$headers = @{ Authorization = "Bearer $env:SYNC_SECRET" }
+Invoke-RestMethod -Method Post -Headers $headers -Uri "$env:URL/api/integrations/sync?source=all"
+```
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+Допустимые значения `source`: `amo`, `alfa`, `all`. Успешный запрос возвращает HTTP 202. Состояние запусков доступно через защищённый endpoint:
 
-## Useful Commands
+```powershell
+Invoke-RestMethod -Headers $headers -Uri "$env:URL/api/integrations/summary"
+```
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+Статусы `completed_with_errors` и `failed` нужно сверять с Netlify Function logs. Предыдущие записи остаются доступны, а интерфейс показывает их freshness.
 
-## Learn More
+## Однократный перенос месячных планов
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+Импортёр принимает JSON из stdin, сначала валидирует весь набор и только затем выполняет одну Postgres-транзакцию. Поддерживаются массив строк, `{ "results": [...] }` и стандартный массив result-envelope из CLI.
+
+Пустой набор безопасен и оставляет встроенный `INITIAL_PLAN` источником плана:
+
+```powershell
+'[]' | node scripts/import-monthly-plans.mjs
+```
+
+Для однократного переноса архивных планов из прежней D1-базы:
+
+```powershell
+npx wrangler@4.92.0 d1 execute rnp-dashboard --remote --command "SELECT month,new_leads,no_contact_percent,contact_percent,revenue,new_sales,repeat_revenue,updated_at FROM monthly_plans ORDER BY month" --json | node scripts/import-monthly-plans.mjs
+```
+
+`NETLIFY_DB_URL` должен указывать на целевую Postgres-базу. Невалидная строка или ошибка записи откатывает всю транзакцию.
+
+## Деплой
+
+```powershell
+npx netlify-cli status
+npx netlify-cli deploy --build
+npx netlify-cli deploy --build --prod
+```
+
+Перед production-публикацией проверьте environment variables, успешное применение миграций, `/api/integrations/summary`, вкладки «Продажи», «Ученики» и «Группы» на desktop и mobile.
+
+## Откат
+
+Старый удалённый Cloudflare deployment и исходная D1-база не изменяются этим проектом и временно остаются только как аварийная точка отката. В текущем repository нет Cloudflare runtime, D1 binding или команд Cloudflare deployment. Возврат трафика выполняется на уровне DNS/hosting после проверки сохранности старого deployment; данные из Postgres обратно автоматически не переносятся.
+
+## Официальная документация
+
+- [Netlify Database](https://docs.netlify.com/build/data-and-storage/netlify-database/)
+- [Netlify Database migrations](https://docs.netlify.com/build/data-and-storage/netlify-database/migrations/)
+- [Netlify Scheduled Functions](https://docs.netlify.com/build/functions/scheduled-functions/)
+- [AlphaCRM API](https://alfacrm.pro/knowledge/integration/api)
