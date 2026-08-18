@@ -1,4 +1,9 @@
 .tabsWrap {
+  --muted: var(--ink-soft);
+  --red: var(--terracotta);
+  --blue: var(--green-soft);
+  --jade: var(--green);
+  --surface-soft: var(--paper);
   width: min(1540px, calc(100% - 40px));
   min-height: 54px;
   display: flex;
@@ -76,6 +81,11 @@
 }
 
 .analyticsShell {
+  --muted: var(--ink-soft);
+  --red: var(--terracotta);
+  --blue: var(--green-soft);
+  --jade: var(--green);
+  --surface-soft: var(--paper);
   width: min(1540px, calc(100% - 40px));
   display: grid;
   gap: 16px;
@@ -120,7 +130,7 @@
 }
 
 .analyticsHeader h1 {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "PT Serif", Georgia, "Times New Roman", serif;
   font-size: clamp(38px, 5vw, 64px);
   font-weight: 400;
   letter-spacing: -0.045em;
@@ -206,7 +216,7 @@
 .primaryMetrics strong,
 .secondaryMetrics strong {
   overflow-wrap: anywhere;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: "JetBrains Mono", var(--font-geist-mono), monospace;
   font-size: clamp(19px, 2.1vw, 31px);
   font-weight: 600;
   letter-spacing: -0.06em;
@@ -219,7 +229,7 @@
 
 .primaryMetrics small {
   color: var(--jade);
-  font-family: var(--font-geist-mono), monospace;
+  font-family: "JetBrains Mono", var(--font-geist-mono), monospace;
   font-size: 9px;
   font-weight: 700;
 }
@@ -253,7 +263,7 @@
 
 .panelHeading h2,
 .registryHeading h2 {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "PT Serif", Georgia, "Times New Roman", serif;
   font-size: 19px;
   font-weight: 400;
 }
@@ -268,7 +278,7 @@
 
 .panelHeading > strong {
   color: var(--red);
-  font-family: var(--font-geist-mono), monospace;
+  font-family: "JetBrains Mono", var(--font-geist-mono), monospace;
   font-size: 28px;
 }
 
@@ -292,7 +302,7 @@
 
 .trendChart strong,
 .trendChart span {
-  font-family: var(--font-geist-mono), monospace;
+  font-family: "JetBrains Mono", var(--font-geist-mono), monospace;
   font-size: 9px;
 }
 
@@ -511,7 +521,7 @@
 }
 
 .rankingColumns p strong {
-  font-family: var(--font-geist-mono), monospace;
+  font-family: "JetBrains Mono", var(--font-geist-mono), monospace;
   font-size: 9px;
   white-space: nowrap;
 }
@@ -527,7 +537,7 @@
 .teacherList p strong {
   margin-top: 4px;
   color: var(--jade);
-  font-family: var(--font-geist-mono), monospace;
+  font-family: "JetBrains Mono", var(--font-geist-mono), monospace;
 }
 
 .warningStrip {
