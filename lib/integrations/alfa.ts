@@ -70,6 +70,16 @@ const BRANCH_ENTITIES: AlfaEntityDefinition[] = [
   { entityType: "teacher", controller: "teacher" },
 ];
 
+const DASHBOARD_ENTITY_TYPES = new Set([
+  "customer",
+  "group",
+  "lesson",
+  "study_status",
+  "pay",
+  "tariff",
+  "teacher",
+]);
+
 function normalizeBaseUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
 }
@@ -232,8 +242,10 @@ export class AlfaClient {
 
     for (const branchId of branchIds) {
       let customers: unknown[] = [];
+      let groups: unknown[] = [];
 
       for (const definition of BRANCH_ENTITIES) {
+        if (!DASHBOARD_ENTITY_TYPES.has(definition.entityType)) continue;
         const suffix =
           definition.suffix === undefined ? "/index" : definition.suffix;
         const path = `/v2api/${branchId}/${definition.controller}${suffix}`;
@@ -241,6 +253,7 @@ export class AlfaClient {
           const payloads = await this.collection(path);
           addRecords(definition.entityType, payloads, branchId);
           if (definition.entityType === "customer") customers = payloads;
+          if (definition.entityType === "group") groups = payloads;
         } catch (error) {
           result.errors.push({
             source: "alfa",
@@ -251,9 +264,35 @@ export class AlfaClient {
         }
       }
 
-      for (const customer of customers) {
+      await Promise.all(groups.map(async (group) => {
+        const groupId = externalIdOf(group, "");
+        if (!groupId) return;
+        try {
+          const memberships = await this.collection(
+            `/v2api/${branchId}/cgi/index?group_id=${encodeURIComponent(groupId)}`,
+          );
+          addRecords(
+            "group_customer",
+            memberships.map((membership) =>
+              membership && typeof membership === "object" && !Array.isArray(membership)
+                ? { group_id: groupId, ...membership }
+                : membership,
+            ),
+            branchId,
+          );
+        } catch (error) {
+          result.errors.push({
+            source: "alfa",
+            scope: branchId,
+            entityType: "group_customer",
+            message: `group ${groupId}: ${safeErrorMessage(error)}`,
+          });
+        }
+      }));
+
+      await Promise.all(customers.map(async (customer) => {
         const customerId = externalIdOf(customer, "");
-        if (!customerId) continue;
+        if (!customerId) return;
         try {
           const tariffs = await this.collection(
             `/v2api/${branchId}/customer-tariff/index?customer_id=${encodeURIComponent(customerId)}`,
@@ -275,7 +314,7 @@ export class AlfaClient {
             message: `customer ${customerId}: ${safeErrorMessage(error)}`,
           });
         }
-      }
+      }));
     }
 
     return result;

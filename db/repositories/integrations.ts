@@ -1,6 +1,7 @@
 import { desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../index.ts";
+import { ensureLocalDatabaseSchema } from "../ensure-schema.ts";
 import { integrationRecords, integrationSyncRuns } from "../schema.ts";
 import type {
   IntegrationSource,
@@ -53,6 +54,7 @@ export interface IntegrationRepository {
 
 export const integrationRepository: IntegrationRepository = {
   async startRun(source) {
+    await ensureLocalDatabaseSchema();
     const id = crypto.randomUUID();
     await db.insert(integrationSyncRuns).values({
       id,
@@ -64,6 +66,7 @@ export const integrationRepository: IntegrationRepository = {
   },
 
   async saveRecords(runId, records) {
+    await ensureLocalDatabaseSchema();
     const fetchedAt = Date.now();
 
     for (let offset = 0; offset < records.length; offset += 100) {
@@ -107,6 +110,7 @@ export const integrationRepository: IntegrationRepository = {
   },
 
   async finishRun(runId, input) {
+    await ensureLocalDatabaseSchema();
     await db
       .update(integrationSyncRuns)
       .set({
@@ -121,6 +125,7 @@ export const integrationRepository: IntegrationRepository = {
   },
 
   async listPayloads(source, entityTypes) {
+    await ensureLocalDatabaseSchema();
     if (entityTypes.length === 0) return [];
     return db
       .select({
@@ -140,6 +145,7 @@ export const integrationRepository: IntegrationRepository = {
   },
 
   async summary() {
+    await ensureLocalDatabaseSchema();
     const counts = await db
       .select({
         source: integrationRecords.source,

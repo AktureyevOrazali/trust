@@ -1,6 +1,7 @@
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 
 import { db } from "../index.ts";
+import { ensureLocalDatabaseSchema } from "../ensure-schema.ts";
 import { analyticsDailySnapshots, integrationRecords } from "../schema.ts";
 
 export type DailySnapshot = typeof analyticsDailySnapshots.$inferSelect;
@@ -21,7 +22,8 @@ export interface AnalyticsRepository {
 }
 
 export const analyticsRepository: AnalyticsRepository = {
-  listAlphaRecords(entityTypes) {
+  async listAlphaRecords(entityTypes) {
+    await ensureLocalDatabaseSchema();
     const query = db
       .select({
         scope: integrationRecords.scope,
@@ -41,7 +43,8 @@ export const analyticsRepository: AnalyticsRepository = {
     );
   },
 
-  listDailySnapshots(fromDate) {
+  async listDailySnapshots(fromDate) {
+    await ensureLocalDatabaseSchema();
     return db
       .select()
       .from(analyticsDailySnapshots)
@@ -53,6 +56,7 @@ export const analyticsRepository: AnalyticsRepository = {
   },
 
   async saveDailySnapshot(snapshot) {
+    await ensureLocalDatabaseSchema();
     await db
       .insert(analyticsDailySnapshots)
       .values(snapshot)

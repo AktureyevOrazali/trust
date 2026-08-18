@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 
 import type { MonthlyPlan } from "../../lib/dashboard/plan";
 import { db } from "../index";
+import { ensureLocalDatabaseSchema } from "../ensure-schema";
 import { monthlyPlans } from "../schema";
 
 export interface PlanRepository {
@@ -11,6 +12,7 @@ export interface PlanRepository {
 
 export const planRepository: PlanRepository = {
   async get(month) {
+    await ensureLocalDatabaseSchema();
     const rows = await db
       .select()
       .from(monthlyPlans)
@@ -20,6 +22,7 @@ export const planRepository: PlanRepository = {
   },
 
   async save(plan) {
+    await ensureLocalDatabaseSchema();
     await db
       .insert(monthlyPlans)
       .values(plan)
