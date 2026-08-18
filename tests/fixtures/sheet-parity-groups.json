@@ -1,0 +1,126 @@
+{
+  "hours": [
+    {
+      "group": "GuzChV33",
+      "hours": 12
+    },
+    {
+      "group": "Выезд",
+      "hours": 12
+    },
+    {
+      "group": "ZuhChM34",
+      "hours": 0
+    },
+    {
+      "group": "AmnChM20",
+      "hours": 0
+    },
+    {
+      "group": "GuzChM27",
+      "hours": 0
+    },
+    {
+      "group": "ZuhChV35",
+      "hours": 0
+    },
+    {
+      "group": "ИНД+группа",
+      "hours": 0
+    },
+    {
+      "group": "ZuhChM31",
+      "hours": 0
+    },
+    {
+      "group": "ZuhV35",
+      "hours": 0
+    },
+    {
+      "group": "ZuhChV23",
+      "hours": 0
+    },
+    {
+      "group": "ZuhChV20",
+      "hours": 0
+    },
+    {
+      "group": "ZuhChV24",
+      "hours": 0
+    },
+    {
+      "group": "AizhChV20",
+      "hours": 0
+    },
+    {
+      "group": "группа",
+      "hours": 0
+    },
+    {
+      "group": "AmnChM19",
+      "hours": 0
+    },
+    {
+      "group": "AmChM29",
+      "hours": 0
+    },
+    {
+      "group": "ZuhChM33",
+      "hours": 0
+    },
+    {
+      "group": "AmnChM36",
+      "hours": 0
+    },
+    {
+      "group": "VladChM67",
+      "hours": 0
+    },
+    {
+      "group": "AizhChM21",
+      "hours": 0
+    },
+    {
+      "group": "Разьезд",
+      "hours": 0
+    },
+    {
+      "group": "GuzChM25",
+      "hours": 0
+    },
+    {
+      "group": "бронь",
+      "hours": 0
+    }
+  ],
+  "rates": [
+    {
+      "teacher": "Teacher 003",
+      "rate": 3000
+    },
+    {
+      "teacher": "Teacher 005",
+      "rate": 2500
+    },
+    {
+      "teacher": "Teacher 007",
+      "rate": 2000
+    },
+    {
+      "teacher": "Teacher 004",
+      "rate": 2000
+    },
+    {
+      "teacher": "Teacher 002",
+      "rate": 3000
+    },
+    {
+      "teacher": "Teacher 006",
+      "rate": 3000
+    },
+    {
+      "teacher": "Teacher 008",
+      "rate": 2500
+    }
+  ]
+}
