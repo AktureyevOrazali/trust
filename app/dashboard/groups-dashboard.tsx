@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { AnalyticsFilters, GroupsDashboardData } from "@/lib/analytics/types";
 import styles from "./dashboard.module.css";
 
@@ -52,12 +53,19 @@ export function GroupsDashboard({
   filters,
   refreshing,
   onFiltersChange,
+  onRatesSaved,
 }: {
   data: GroupsDashboardData;
   filters: AnalyticsFilters;
   refreshing: boolean;
   onFiltersChange: (filters: AnalyticsFilters) => void;
+  onRatesSaved: () => void;
 }) {
+  const [rates, setRates] = useState(data.teacherRates);
+  const [adminKey, setAdminKey] = useState("");
+  const [savingRates, setSavingRates] = useState(false);
+  const [rateMessage, setRateMessage] = useState("");
+  const [rateError, setRateError] = useState("");
   const rows = data.metrics.rows;
   const totals = rows.reduce(
     (result, row) => ({
@@ -70,8 +78,43 @@ export function GroupsDashboard({
   );
   const revenueRanking = [...rows].sort((left, right) => right.revenue - left.revenue).slice(0, 5);
   const profitRanking = [...rows].sort((left, right) => right.grossProfit - left.grossProfit).slice(0, 5);
+  const changedRates = rates.filter((setting) =>
+    data.teacherRates.find((original) =>
+      original.branchId === setting.branchId && original.teacherId === setting.teacherId
+    )?.rate !== setting.rate,
+  );
   const replaceFilter = (name: keyof AnalyticsFilters, value: string) => {
     onFiltersChange({ ...filters, [name]: value || undefined });
+  };
+  const saveRates = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSavingRates(true);
+    setRateMessage("");
+    setRateError("");
+    try {
+      const response = await fetch("/api/teacher-rates", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-sync-secret": adminKey,
+        },
+        body: JSON.stringify({
+          rates: changedRates.map(({ branchId, teacherId, rate }) => ({ branchId, teacherId, rate })),
+        }),
+      });
+      const result = await response.json() as {
+        rates?: GroupsDashboardData["teacherRates"];
+        error?: string;
+      };
+      if (!response.ok || !result.rates) throw new Error(result.error || "Не удалось сохранить ставки.");
+      setRates(result.rates);
+      setRateMessage("Ставки сохранены. Расходы и прибыль пересчитаны.");
+      onRatesSaved();
+    } catch (error) {
+      setRateError(error instanceof Error ? error.message : "Не удалось сохранить ставки.");
+    } finally {
+      setSavingRates(false);
+    }
   };
 
   return (
@@ -179,6 +222,61 @@ export function GroupsDashboard({
           </div>
           {data.teacherRollups.length === 0 && <p className={styles.emptyState}>Сводка появится после синхронизации.</p>}
         </article>
+      </section>
+
+      <section className={styles.panel}>
+        <div className={styles.panelHeading}>
+          <div><h2>Ставки преподавателей</h2><p>Ставка за час хранится в PostgreSQL и используется в формуле расходов: часы × ставка</p></div>
+        </div>
+        <form className={styles.ratesForm} onSubmit={saveRates}>
+          <div className={styles.ratesGrid}>
+            {rates.map((setting, index) => (
+              <label className={styles.rateField} key={`${setting.branchId}:${setting.teacherId}`}>
+                <span>
+                  <strong>{setting.teacher}</strong>
+                  <small data-missing={setting.rate === 0}>
+                    {setting.rate === 0 ? "Нужно указать ставку" : setting.source === "sheet_seed" ? "Ставка из таблицы" : "Изменено вручную"}
+                  </small>
+                </span>
+                <span className={styles.rateInputWrap}>
+                  <input
+                    aria-label={`Ставка преподавателя ${setting.teacher}`}
+                    inputMode="numeric"
+                    min="0"
+                    max="1000000"
+                    step="1"
+                    type="number"
+                    value={setting.rate}
+                    onChange={(event) => {
+                      const rate = Math.max(0, Math.min(1_000_000, Number(event.target.value) || 0));
+                      setRates((current) => current.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, rate, source: "manual" } : item,
+                      ));
+                    }}
+                  />
+                  <small>₸ / час</small>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className={styles.ratesActions}>
+            <label className={styles.filterField}>
+              <span>Ключ администратора</span>
+              <input
+                autoComplete="current-password"
+                type="password"
+                value={adminKey}
+                onChange={(event) => setAdminKey(event.target.value)}
+                placeholder="Нужен для сохранения"
+              />
+            </label>
+            <button className={styles.saveRatesButton} disabled={savingRates || !adminKey || changedRates.length === 0} type="submit">
+              {savingRates ? "Сохраняю…" : "Сохранить и пересчитать"}
+            </button>
+            {rateMessage && <p className={styles.formSuccess} role="status">{rateMessage}</p>}
+            {rateError && <p className={styles.formError} role="alert">{rateError}</p>}
+          </div>
+        </form>
       </section>
 
       {data.warnings.length > 0 && (

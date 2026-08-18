@@ -540,6 +540,132 @@
   font-family: "JetBrains Mono", var(--font-geist-mono), monospace;
 }
 
+.ratesForm {
+  display: grid;
+}
+
+.ratesGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.rateField {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 20px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.rateField:nth-child(3n) {
+  border-right: 0;
+}
+
+.rateField > span:first-child,
+.rateField strong,
+.rateField small {
+  display: block;
+}
+
+.rateField strong {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rateField small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.rateField small[data-missing="true"] {
+  color: #8e2f28;
+}
+
+.rateInputWrap {
+  position: relative;
+}
+
+.rateInputWrap input {
+  width: 100%;
+  height: 34px;
+  padding: 0 42px 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  background: var(--surface-soft);
+  font-family: "JetBrains Mono", var(--font-geist-mono), monospace;
+  font-size: 10px;
+}
+
+.rateInputWrap input:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.rateInputWrap small {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  margin: 0;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.ratesActions {
+  min-height: 70px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+}
+
+.ratesActions .filterField input {
+  width: 210px;
+}
+
+.saveRatesButton {
+  min-height: 33px;
+  padding: 0 14px;
+  border: 1px solid var(--jade);
+  border-radius: 7px;
+  color: var(--surface);
+  background: var(--jade);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.saveRatesButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.saveRatesButton:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.formSuccess,
+.formError {
+  align-self: center;
+  margin: 0 0 1px;
+  font-size: 9px;
+}
+
+.formSuccess {
+  color: var(--jade);
+}
+
+.formError {
+  color: #8e2f28;
+}
+
 .warningStrip {
   display: flex;
   align-items: center;
@@ -663,6 +789,18 @@
   .filters {
     justify-content: flex-start;
   }
+
+  .ratesGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rateField:nth-child(3n) {
+    border-right: 1px solid var(--line);
+  }
+
+  .rateField:nth-child(2n) {
+    border-right: 0;
+  }
 }
 
 @media (max-width: 780px) {
@@ -752,6 +890,25 @@
 
   .warningStrip {
     display: grid;
+  }
+
+  .ratesGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .rateField,
+  .rateField:nth-child(2n),
+  .rateField:nth-child(3n) {
+    border-right: 0;
+  }
+
+  .ratesActions {
+    display: grid;
+    align-items: stretch;
+  }
+
+  .ratesActions .filterField input {
+    width: 100%;
   }
 
   .warningStrip span {

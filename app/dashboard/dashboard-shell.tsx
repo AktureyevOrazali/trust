@@ -244,6 +244,7 @@ export function DashboardShell({ salesData }: { salesData: DashboardData }) {
                   filters={groupFilters}
                   refreshing={groups.loading}
                   onFiltersChange={updateGroupFilters}
+                  onRatesSaved={() => void loadGroups(groupFilters)}
                 />
               : <LoadingPanel />
         )}
