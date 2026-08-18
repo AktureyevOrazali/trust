@@ -84,6 +84,7 @@ export function StudentsDashboard({
   onFiltersChange: (filters: AnalyticsFilters) => void;
 }) {
   const [search, setSearch] = useState("");
+  const [registryOpen, setRegistryOpen] = useState(false);
   const rows = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase("ru");
     if (!needle) return data.rows;
@@ -93,6 +94,8 @@ export function StudentsDashboard({
     );
   }, [data.rows, search]);
   const trend = monthlyTrend(data.trend);
+  const visibleRows = registryOpen ? rows : rows.slice(0, 8);
+  const hasHiddenRows = rows.length > 8;
   const maxActive = Math.max(1, ...trend.map((point) => point.active));
   const replaceFilter = (name: keyof AnalyticsFilters, value: string) => {
     onFiltersChange({ ...filters, [name]: value || undefined });
@@ -169,7 +172,7 @@ export function StudentsDashboard({
 
       <section className={styles.panel} id="student-registry">
         <div className={styles.registryHeading}>
-          <div><h2>Реестр учеников</h2><p>{integer.format(rows.length)} строк после фильтров</p></div>
+          <div><h2>Реестр учеников</h2><p>показаны {integer.format(Math.min(8, rows.length))} из {integer.format(rows.length)} учеников</p></div>
           <div className={styles.filters}>
             <label className={`${styles.filterField} ${styles.searchField}`}>
               <span>Поиск</span>
@@ -201,11 +204,11 @@ export function StudentsDashboard({
             />
           </div>
         </div>
-        <div className={styles.tableScroll}>
+        <div className={styles.tableScroll} id="student-registry-table">
           <table className={styles.dataTable}>
             <thead><tr><th>Ученик</th><th>Статус</th><th>Группа</th><th>Преподаватель</th><th>Период обучения</th><th>Посещения</th><th>Оплаты</th><th>LTV</th><th>Абонемент</th><th>Остаток</th></tr></thead>
             <tbody>
-              {rows.map((row) => (
+              {visibleRows.map((row) => (
                 <tr key={row.id}>
                   <td><strong>{row.name}</strong></td>
                   <td><span className={styles.statusBadge} data-status={row.status}>{row.status || "Не указан"}</span></td>
@@ -223,6 +226,17 @@ export function StudentsDashboard({
           </table>
           {rows.length === 0 && <p className={styles.emptyState}>По выбранным условиям учеников нет.</p>}
         </div>
+        {hasHiddenRows && (
+          <button
+            className={styles.registryToggle}
+            type="button"
+            aria-expanded={registryOpen}
+            aria-controls="student-registry-table"
+            onClick={() => setRegistryOpen((open) => !open)}
+          >
+            {registryOpen ? "Свернуть" : `Показать всех ${integer.format(rows.length)} учеников`}
+          </button>
+        )}
       </section>
 
       {data.warnings.length > 0 && (

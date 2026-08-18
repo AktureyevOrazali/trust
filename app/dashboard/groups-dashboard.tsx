@@ -63,10 +63,13 @@ export function GroupsDashboard({
 }) {
   const [rates, setRates] = useState(data.teacherRates);
   const [adminKey, setAdminKey] = useState("");
+  const [registryOpen, setRegistryOpen] = useState(false);
   const [savingRates, setSavingRates] = useState(false);
   const [rateMessage, setRateMessage] = useState("");
   const [rateError, setRateError] = useState("");
   const rows = data.metrics.rows;
+  const visibleRows = registryOpen ? rows : rows.slice(0, 8);
+  const hasHiddenRows = rows.length > 8;
   const totals = rows.reduce(
     (result, row) => ({
       students: result.students + row.studentCount,
@@ -148,7 +151,7 @@ export function GroupsDashboard({
 
       <section className={styles.panel}>
         <div className={styles.registryHeading}>
-          <div><h2>Экономика по группам</h2><p>Выручка и расходы рассчитаны по формулам исходной таблицы</p></div>
+          <div><h2>Экономика по группам</h2><p>показаны {integer.format(Math.min(8, rows.length))} из {integer.format(rows.length)} групп</p></div>
           <div className={styles.filters}>
             <FilterSelect
               label="Филиал"
@@ -176,11 +179,11 @@ export function GroupsDashboard({
             />
           </div>
         </div>
-        <div className={styles.tableScroll}>
+        <div className={styles.tableScroll} id="group-registry-table">
           <table className={styles.dataTable}>
             <thead><tr><th>Группа</th><th>Преподаватель</th><th>Ученики</th><th>Проведено часов</th><th>Выручка</th><th>Расход</th><th>Валовая прибыль</th><th>Проверка данных</th></tr></thead>
             <tbody>
-              {rows.map((row) => (
+              {visibleRows.map((row) => (
                 <tr key={row.group}>
                   <td><strong>{row.group}</strong></td>
                   <td>{row.teacher || "Не указан"}</td>
@@ -198,6 +201,17 @@ export function GroupsDashboard({
           </table>
           {rows.length === 0 && <p className={styles.emptyState}>По выбранным условиям групп нет.</p>}
         </div>
+        {hasHiddenRows && (
+          <button
+            className={styles.registryToggle}
+            type="button"
+            aria-expanded={registryOpen}
+            aria-controls="group-registry-table"
+            onClick={() => setRegistryOpen((open) => !open)}
+          >
+            {registryOpen ? "Свернуть" : `Показать все ${integer.format(rows.length)} групп`}
+          </button>
+        )}
       </section>
 
       <section className={styles.insightGrid}>

@@ -708,6 +708,28 @@
   line-height: 1.5;
 }
 
+.registryToggle {
+  display: block;
+  margin: 16px auto;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.registryToggle:hover {
+  border-color: var(--jade);
+}
+
+.registryToggle:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
 .loadingPanel,
 .errorPanel {
   width: min(1540px, calc(100% - 40px));
