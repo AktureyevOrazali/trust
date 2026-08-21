@@ -1,5 +1,6 @@
 import {
   isSyncSource,
+  runSynchronization,
   triggerBackgroundSync,
 } from "@/lib/integrations/sync";
 import { serverEnv } from "@/lib/runtime/env";
@@ -29,7 +30,13 @@ export async function POST(request: Request) {
     );
   }
 
-  await triggerBackgroundSync(requestedSource);
+  if (process.env.NETLIFY_LOCAL === "true") {
+    void runSynchronization(requestedSource).catch((error) =>
+      console.error("Manual local synchronization failed", error)
+    );
+  } else {
+    await triggerBackgroundSync(requestedSource);
+  }
   return Response.json(
     { accepted: true, source: requestedSource },
     { status: 202 },
