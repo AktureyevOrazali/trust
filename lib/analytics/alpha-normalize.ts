@@ -205,6 +205,7 @@ function warningList(counts: Map<string, number>): DataQualityWarning[] {
     missingGroup: "У активных клиентов не найдена текущая группа",
     missingTeacher: "У групп не найден преподаватель",
     missingRate: "У преподавателей не найдена часовая ставка",
+    missingCreatedAt: "У учеников не указана дата добавления в AlphaCRM",
     orphanPayment: "Оплаты не удалось связать с клиентом по Alpha ID",
     orphanTariff: "Абонементы не удалось связать с клиентом по Alpha ID",
   };
@@ -450,7 +451,9 @@ export function normalizeAlphaRecords(
       payload.study_end_date,
       groupEntries[0]?.end,
     );
-    const months = fullMonths(startDate, endDate, now);
+    const createdAt = dateValue(payload.created_at);
+    if (!createdAt) bump(warnings, "missingCreatedAt");
+    const months = fullMonths(createdAt, null, now);
     const payments = paymentTotals.get(key) ?? { count: 0, total: 0 };
     const attended = attendance.get(key) ?? { count: 0, last: null };
     const subscriptionAmount = numeric(

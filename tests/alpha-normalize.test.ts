@@ -32,6 +32,7 @@ const records: StoredAlphaRecord[] = [
     name: "Одинаковое имя",
     is_study: 1,
     study_status_id: "s1",
+    created_at: "2026-04-01 09:15:00",
     paid_lesson_count: 7,
     teacher_ids: ["t2"],
     phone: "+70000000000",
@@ -41,6 +42,7 @@ const records: StoredAlphaRecord[] = [
     name: "Одинаковое имя",
     is_study: "1",
     study_status_id: "s2",
+    created_at: "2026-06-22 12:35:29",
   }),
   record("customer", "lead", { id: "lead", name: "Лид", is_study: 0 }),
   record("group_customer", "m1", {
@@ -109,13 +111,14 @@ test("normalizes AlphaCRM records using IDs and exact spreadsheet inputs", () =>
   assert.equal(first.paymentCount, 1);
   assert.equal(first.ltv, 100_000);
   assert.equal(first.subscriptionAmount, 30_000);
-  assert.equal(first.months, 5);
-  assert.equal(first.renewals, 4);
+  assert.equal(first.months, 4);
+  assert.equal(first.renewals, 3);
   assert.equal(first.activeTariff, "Стандарт");
   assert.equal(first.lessonBalance, 7);
   assert.equal(second.status, "Заморозка");
   assert.equal(second.ltv, 200_000);
   assert.equal(second.attendedLessons, 0);
+  assert.equal(second.months, 1);
   assert.equal(normalized.groupHours.get("Группа 1"), 1.5);
   assert.equal(normalized.groupHours.get("Группа 2"), 1);
   assert.equal(normalized.teacherRates.get("Учитель 1"), 2500);
@@ -132,6 +135,7 @@ test("maps AlphaCRM completion status to the unchanged sheet formula vocabulary"
       name: "Завершивший ученик",
       is_study: 1,
       study_status_id: "done",
+      created_at: "2026-01-01 08:00:00",
       b_date: "2026-01-01",
       e_date: "2026-08-01",
     }),
@@ -141,7 +145,37 @@ test("maps AlphaCRM completion status to the unchanged sheet formula vocabulary"
   assert.equal(normalized.students[0].status, "Закончил");
   assert.equal(normalized.students[0].startDate, "2026-01-01");
   assert.equal(normalized.students[0].endDate, "2026-08-01");
+  assert.equal(normalized.students[0].months, 7);
   assert.equal(normalized.warnings.some((warning) => warning.code === "missingGroup"), false);
+});
+
+test("counts only full months from AlphaCRM customer creation date through today", () => {
+  const customerRecords = [
+    record("study_status", "active", { id: "active", name: "Активен" }),
+    record("customer", "before-anniversary", {
+      id: "before-anniversary",
+      name: "До полного месяца",
+      is_study: 1,
+      study_status_id: "active",
+      created_at: "2026-06-22 12:35:29",
+      b_date: "2026-06-22",
+      e_date: "2030-12-31",
+    }),
+    record("customer", "on-anniversary", {
+      id: "on-anniversary",
+      name: "После полного месяца",
+      is_study: 1,
+      study_status_id: "active",
+      created_at: "2026-05-01 08:00:00",
+      b_date: "2026-05-01",
+      e_date: "2030-12-31",
+    }),
+  ];
+  const normalized = normalizeAlphaRecords(customerRecords, new Date("2026-08-21T12:00:00Z"));
+
+  assert.equal(normalized.students.find((student) => student.id.endsWith("before-anniversary"))?.months, 1);
+  assert.equal(normalized.students.find((student) => student.id.endsWith("on-anniversary"))?.months, 3);
+  assert.equal(normalized.students.find((student) => student.id.endsWith("on-anniversary"))?.renewals, 2);
 });
 
 test("preserves the workbook group formula behavior after normalization", () => {

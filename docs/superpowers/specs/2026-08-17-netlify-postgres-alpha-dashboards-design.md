@@ -105,7 +105,7 @@ Phase one treats the Google Sheets calculations as the compatibility contract. A
 - Group and teacher are resolved from CGI membership, group, and teacher data.
 - Start and end dates use the student's AlphaCRM tariff/membership dates.
 - Status is the AlphaCRM study-status name and is compared to the exact sheet labels Active (`Активен`), Frozen (`Заморозка`), Finished (`Закончил`), and Booking (`Бронь`).
-- Study months reproduce the sheet's populated `Кол-во мес` value from the AlphaCRM study date interval.
+- Study months reproduce `Кол-во мес` as the number of full calendar months from the AlphaCRM customer `created_at` date through today.
 - Renewals reproduce the row formula `IF(months <= 0, blank, months - 1)`.
 - Subscription amount comes from the applicable AlphaCRM tariff price.
 
