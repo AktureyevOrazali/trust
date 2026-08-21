@@ -111,6 +111,64 @@ export function DashboardShell({ salesData }: { salesData: DashboardData }) {
   }, []);
 
   useEffect(() => {
+    let disposed = false;
+    let pollTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const waitForFreshData = (previousFetchedAt: number | null, attempt = 0) => {
+      pollTimer = setTimeout(async () => {
+        if (disposed) return;
+        try {
+          const response = await fetch("/api/integrations/auto-sync", { cache: "no-store" });
+          const result = await response.json() as { fetchedAt: number | null; stale: boolean };
+          if (response.ok && result.fetchedAt && result.fetchedAt > (previousFetchedAt ?? 0)) {
+            await Promise.all([
+              loadStudents(studentFilters),
+              loadGroups(groupFilters),
+            ]);
+            return;
+          }
+        } catch {
+          // The next scheduled check will retry without interrupting the dashboard.
+        }
+        if (!disposed && attempt < 23) waitForFreshData(previousFetchedAt, attempt + 1);
+      }, 5_000);
+    };
+
+    const requestAutomaticSync = async () => {
+      try {
+        const response = await fetch("/api/integrations/auto-sync", {
+          method: "POST",
+          cache: "no-store",
+        });
+        const result = await response.json() as {
+          fetchedAt: number | null;
+          sync: "fresh" | "accepted" | "already_requested" | "failed";
+        };
+        if (!disposed && response.ok && result.sync !== "fresh") {
+          if (pollTimer) clearTimeout(pollTimer);
+          waitForFreshData(result.fetchedAt);
+        }
+      } catch {
+        // The hourly scheduler remains the primary production refresh path.
+      }
+    };
+
+    void requestAutomaticSync();
+    const hourlyTimer = setInterval(requestAutomaticSync, 60 * 60 * 1000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void requestAutomaticSync();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      disposed = true;
+      clearInterval(hourlyTimer);
+      if (pollTimer) clearTimeout(pollTimer);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [groupFilters, loadGroups, loadStudents, studentFilters]);
+
+  useEffect(() => {
     if (activeTab === "students" && !students.data && !students.loading && !students.error) {
       void loadStudents(studentFilters);
     }
