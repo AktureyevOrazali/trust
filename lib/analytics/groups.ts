@@ -22,6 +22,7 @@ const ANALYTICS_ENTITIES = [
   "pay",
   "tariff",
   "customer_tariff",
+  "log",
 ];
 
 function average(values: number[]): number {

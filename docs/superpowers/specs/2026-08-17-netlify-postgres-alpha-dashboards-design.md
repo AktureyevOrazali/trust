@@ -103,7 +103,7 @@ Phase one treats the Google Sheets calculations as the compatibility contract. A
 - Attended lessons are counted from conducted lesson details with `is_attend = 1`.
 - Payment count and LTV are derived from the student's confirmed income payments.
 - Group and teacher are resolved from CGI membership, group, and teacher data.
-- Start and end dates use the student's AlphaCRM tariff/membership dates.
+- The start date uses the student's current AlphaCRM tariff/membership start date. The end date is populated only for a finished student and uses the exact `Customer.study_status_id` transition time from the AlphaCRM change log; tariff expiry is kept separate and is never presented as the end of study.
 - Status is the AlphaCRM study-status name and is compared to the exact sheet labels Active (`Активен`), Frozen (`Заморозка`), Finished (`Закончил`), and Booking (`Бронь`).
 - Study months reproduce `Кол-во мес` as the number of full calendar months from the AlphaCRM customer `created_at` date through today.
 - Renewals reproduce the row formula `IF(months <= 0, blank, months - 1)`.

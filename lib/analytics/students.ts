@@ -25,6 +25,7 @@ const ANALYTICS_ENTITIES = [
   "pay",
   "tariff",
   "customer_tariff",
+  "log",
 ];
 
 function unique(values: string[]): string[] {
@@ -87,8 +88,8 @@ function studentRisks(students: NormalizedStudent[], today: Date): StudentRiskRo
   return students.flatMap((student) => {
     if (student.status !== "Активен") return [];
     const reasons: string[] = [];
-    if (student.endDate) {
-      const daysUntilEnd = (Date.parse(`${student.endDate}T12:00:00Z`) - todayTime) / day;
+    if (student.tariffEndDate) {
+      const daysUntilEnd = (Date.parse(`${student.tariffEndDate}T12:00:00Z`) - todayTime) / day;
       if (daysUntilEnd >= 0 && daysUntilEnd <= 14) reasons.push("Абонемент заканчивается в течение 14 дней");
     }
     if (student.lastAttendance) {
@@ -105,7 +106,7 @@ function studentRisks(students: NormalizedStudent[], today: Date): StudentRiskRo
           id: student.id,
           name: student.name,
           group: student.group,
-          endDate: student.endDate,
+          tariffEndDate: student.tariffEndDate,
           lessonBalance: student.lessonBalance,
           reasons,
         }]

@@ -214,7 +214,7 @@ export function StudentsDashboard({
                   <td><span className={styles.statusBadge} data-status={row.status}>{row.status || "Не указан"}</span></td>
                   <td>{row.group || "Не указана"}</td>
                   <td>{row.teacher || "Не указан"}</td>
-                  <td>{dateLabel(row.startDate)}<small>{row.endDate ? `по ${dateLabel(row.endDate)}` : "без даты окончания"}</small></td>
+                  <td>{dateLabel(row.startDate)}<small>{row.endDate ? `по ${dateLabel(row.endDate)}` : row.status === "Закончил" ? "дата завершения не найдена" : "обучение продолжается"}</small></td>
                   <td>{integer.format(row.attendedLessons)}</td>
                   <td>{integer.format(row.paymentCount)}</td>
                   <td><strong>{currency.format(row.ltv)}</strong></td>

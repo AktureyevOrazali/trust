@@ -117,7 +117,7 @@ export interface StudentRiskRow {
   id: string;
   name: string;
   group: string;
-  endDate: string | null;
+  tariffEndDate: string | null;
   lessonBalance: number;
   reasons: string[];
 }

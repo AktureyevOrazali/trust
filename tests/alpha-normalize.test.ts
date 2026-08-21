@@ -139,14 +139,46 @@ test("maps AlphaCRM completion status to the unchanged sheet formula vocabulary"
       b_date: "2026-01-01",
       e_date: "2026-08-01",
     }),
+    record("log", "completion", {
+      id: "completion",
+      entity: "Customer",
+      entity_id: "done-customer",
+      fields_old: { study_status_id: "active" },
+      fields_new: { study_status_id: "done" },
+      date_time: "2026-08-05 18:21:46",
+    }),
   ];
   const normalized = normalizeAlphaRecords(completedRecords, new Date("2026-08-18T12:00:00Z"));
 
   assert.equal(normalized.students[0].status, "Закончил");
   assert.equal(normalized.students[0].startDate, "2026-01-01");
-  assert.equal(normalized.students[0].endDate, "2026-08-01");
+  assert.equal(normalized.students[0].endDate, "2026-08-05");
+  assert.equal(normalized.students[0].tariffEndDate, "2026-08-01");
   assert.equal(normalized.students[0].months, 7);
   assert.equal(normalized.warnings.some((warning) => warning.code === "missingGroup"), false);
+});
+
+test("does not use tariff expiry as the study period end", () => {
+  const activeRecords = [
+    record("study_status", "active", { id: "active", name: "Активен" }),
+    record("customer", "active-customer", {
+      id: "active-customer",
+      name: "Активный ученик",
+      is_study: 1,
+      study_status_id: "active",
+      created_at: "2026-05-01 08:00:00",
+    }),
+    record("customer_tariff", "active-tariff", {
+      id: "active-tariff",
+      customer_id: "active-customer",
+      b_date: "2026-05-01",
+      e_date: "2027-04-30",
+    }),
+  ];
+  const normalized = normalizeAlphaRecords(activeRecords, new Date("2026-08-21T12:00:00Z"));
+
+  assert.equal(normalized.students[0].endDate, null);
+  assert.equal(normalized.students[0].tariffEndDate, "2027-04-30");
 });
 
 test("counts only full months from AlphaCRM customer creation date through today", () => {

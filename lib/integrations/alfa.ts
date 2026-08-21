@@ -168,12 +168,15 @@ export class AlfaClient {
     return JSON.parse(text);
   }
 
-  private async collection(path: string): Promise<unknown[]> {
+  private async collection(
+    path: string,
+    filters: Record<string, unknown> = {},
+  ): Promise<unknown[]> {
     const items: unknown[] = [];
     let page = 0;
 
     while (true) {
-      const body = (await this.post(path, { page })) as
+      const body = (await this.post(path, { ...filters, page })) as
         | {
             items?: unknown[];
             total?: number;
@@ -243,6 +246,7 @@ export class AlfaClient {
     for (const branchId of branchIds) {
       let customers: unknown[] = [];
       let groups: unknown[] = [];
+      let studyStatuses: unknown[] = [];
 
       for (const definition of BRANCH_ENTITIES) {
         if (!DASHBOARD_ENTITY_TYPES.has(definition.entityType)) continue;
@@ -254,6 +258,7 @@ export class AlfaClient {
           addRecords(definition.entityType, payloads, branchId);
           if (definition.entityType === "customer") customers = payloads;
           if (definition.entityType === "group") groups = payloads;
+          if (definition.entityType === "study_status") studyStatuses = payloads;
         } catch (error) {
           result.errors.push({
             source: "alfa",
@@ -263,6 +268,44 @@ export class AlfaClient {
           });
         }
       }
+
+      const finishedStatusIds = new Set(
+        studyStatuses.flatMap((status) => {
+          if (!status || typeof status !== "object" || Array.isArray(status)) return [];
+          const payload = status as Record<string, unknown>;
+          const name = String(payload.name ?? payload.title ?? "")
+            .trim()
+            .toLocaleLowerCase("ru");
+          return ["закончил", "завершил", "завершила"].includes(name)
+            ? [externalIdOf(status, "")]
+            : [];
+        }).filter(Boolean),
+      );
+
+      await Promise.all(customers.map(async (customer) => {
+        if (!customer || typeof customer !== "object" || Array.isArray(customer)) return;
+        const payload = customer as Record<string, unknown>;
+        const customerId = externalIdOf(customer, "");
+        const statusId = String(payload.study_status_id ?? "").trim();
+        if (!customerId || !finishedStatusIds.has(statusId)) return;
+        try {
+          const logs = await this.collection(
+            `/v2api/${branchId}/log/index`,
+            {
+              entity: "Customer",
+              entity_id: /^\d+$/.test(customerId) ? Number(customerId) : customerId,
+            },
+          );
+          addRecords("log", logs, branchId);
+        } catch (error) {
+          result.errors.push({
+            source: "alfa",
+            scope: branchId,
+            entityType: "log",
+            message: `customer ${customerId}: ${safeErrorMessage(error)}`,
+          });
+        }
+      }));
 
       await Promise.all(groups.map(async (group) => {
         const groupId = externalIdOf(group, "");

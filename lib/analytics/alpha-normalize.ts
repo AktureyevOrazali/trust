@@ -21,6 +21,7 @@ export interface NormalizedStudent extends StudentFormulaRow {
   lessonBalance: number;
   lessonBalanceKnown: boolean;
   activeTariff: string;
+  tariffEndDate: string | null;
   lastAttendance: string | null;
 }
 
@@ -206,6 +207,7 @@ function warningList(counts: Map<string, number>): DataQualityWarning[] {
     missingTeacher: "У групп не найден преподаватель",
     missingRate: "У преподавателей не найдена часовая ставка",
     missingCreatedAt: "У учеников не указана дата добавления в AlphaCRM",
+    missingCompletionDate: "Для завершивших учеников не найдена дата смены статуса в журнале AlphaCRM",
     orphanPayment: "Оплаты не удалось связать с клиентом по Alpha ID",
     orphanTariff: "Абонементы не удалось связать с клиентом по Alpha ID",
   };
@@ -258,6 +260,23 @@ export function normalizeAlphaRecords(
     const payload = object(record.payload);
     const id = entityId(payload, record.externalId);
     if (id) studyStatuses.set(scopedKey(record.scope, id), text(payload.name, payload.title));
+  }
+  const completionDates = new Map<string, string>();
+  for (const record of byType("log")) {
+    const payload = object(record.payload);
+    if (text(payload.entity).toLocaleLowerCase("ru") !== "customer") continue;
+    const customer = text(payload.entity_id);
+    const fieldsNew = object(payload.fields_new);
+    const newStatusId = text(fieldsNew.study_status_id);
+    const newStatus = formulaStatus(text(
+      fieldsNew.study_status_name,
+      newStatusId ? studyStatuses.get(scopedKey(record.scope, newStatusId)) : "",
+    ));
+    const changedAt = dateValue(payload.date_time, payload.created_at);
+    if (!customer || newStatus !== "Закончил" || !changedAt) continue;
+    const key = scopedKey(record.scope, customer);
+    const current = completionDates.get(key);
+    if (!current || changedAt > current) completionDates.set(key, changedAt);
   }
   for (const record of byType("teacher")) {
     const payload = object(record.payload);
@@ -442,7 +461,7 @@ export function normalizeAlphaRecords(
       payload.study_start_date,
       groupEntries[0]?.start,
     );
-    const endDate = dateValue(
+    const tariffEndDate = dateValue(
       currentTariff.e_date,
       currentTariff.end_date,
       currentTariff.date_to,
@@ -451,6 +470,8 @@ export function normalizeAlphaRecords(
       payload.study_end_date,
       groupEntries[0]?.end,
     );
+    const endDate = status === "Закончил" ? completionDates.get(key) ?? null : null;
+    if (status === "Закончил" && !endDate) bump(warnings, "missingCompletionDate");
     const createdAt = dateValue(payload.created_at);
     if (!createdAt) bump(warnings, "missingCreatedAt");
     const months = fullMonths(createdAt, null, now);
@@ -506,6 +527,7 @@ export function normalizeAlphaRecords(
         object(currentTariff.tariff).name,
         tariffDefinition?.name,
       ),
+      tariffEndDate,
       lastAttendance: attended.last,
     });
     for (const groupEntry of groupEntries) {
